@@ -1,0 +1,65 @@
+Conectarse al servidor Linux-Centos
+ssh -X Geo01@192.168.3.31
+passw: cjimenez
+
+Como superuser:
+ssh -X root@192.168.3.31
+passw: sadoman
+
+Via sftp:
+sftp Geo01@192.168.3.31
+Connecting to 192.168.3.31...
+Geo01@192.168.3.31's password:
+passw: cjimenez
+
+Pasar un archivo del servidor a mi PC
+sftp Geo01@192.168.3.31
+Geo01@192.168.3.31's password: 
+Connected to 192.168.3.31.
+sftp> mget zfoldernew.tar.gz 
+
+al reves seria con mput
+
+Copiar un archivo al servidor:
+scp archivo Geo01@192.168.3.31:/home/Geo01/
+scp install_chrome.sh Geo01@192.168.3.31:/home/Geo01/
+
+Copiar una carpeta desde mi terminal al servidor
+scp -r /home/cjimenez/carpeta Geo01@192.168.3.31:/home/Geo01
+
+Comprimir en mi terminal de la PC
+tar -czvf arica.tar.gz /home/nab/Modelado_Arica/
+
+Comprimir en el servidor
+tar -czvf archivo.tar.gz /home/Geo01/huacho1966
+Si lo dejo en /home/Geo01/ se comprimirá todo lo q esta en home
+
+Copiar del Servidor a mi PC
+scp Geo01@192.168.3.31:/home/Geo01/huacho1966.tar.gz /home/cjimenez/
+scp Geo01@192.168.3.31:/home/Geo01/install_chrome.sh /home/cjimenez/
+
+o dentro de una carpeta
+scp Geo01@192.168.3.31:/home/Geo01/install_chrome.sh /home/cjimenez/prueba/
+
+Utilizar el gftp (sudo apt-get install gftp):
+servidor: 192.168.3.31
+puerto: 22
+user: Geo01
+passw: cjimenez
+SSH2
+
+Bash
+# User specific aliases and functions
+export OMP_NUM_THREADS=32
+export SACAUX=/home/cjimenez/sismica/SAC/sac2000/aux
+export PATH=$PATH:/opt/ferret/bin
+export PATH=$PATH:/opt/intel/bin
+
+Ficheros tar
+Empaquetar: tar -cvf archivo.tar /dir/a/comprimir/
+Desempaquetar: tar -xvf archivo.tar
+Ver contenido: tar -tf archivo.tar
+
+Para ejecutar ifort:
+/opt/intel/composer_xe_2011_sp1/bin/ifort programa.f 
+

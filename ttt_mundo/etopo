@@ -1,0 +1,20 @@
+#!/bin/csh -f
+
+set REGION = 120.0/300.0/-80.0/80.0
+set SIZE = M16c
+set AXIS = a20g10
+set grdfile = pacifico.grd
+#set grdfile = tmp2.grd
+set cptfile = color.cpt
+set psfile = etopo1.ps
+
+gmt makecpt -Cglobe -Z > $cptfile
+gmt grdimage $grdfile -R$REGION -J$SIZE -C$cptfile -K -P > $psfile
+gmt pscoast -R$REGION -J$SIZE -B$AXIS -Dh -W1,150 -P -O -K >> $psfile
+
+awk '{ print $3, $2 }' tg.lst | gmt psxy -J$SIZE -R$REGION -St0.4c -G255/0/0 \
+	-W1 -K -O -V >> $psfile
+awk '{ print $3, $2, 15, 0, 0, "CT", $1 }' tg.lst | gmt pstext -J$SIZE \
+	-R$REGION -O -V >> $psfile
+	
+evince etopo1.ps &

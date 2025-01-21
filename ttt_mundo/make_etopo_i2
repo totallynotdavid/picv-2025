@@ -1,0 +1,21 @@
+#!/bin/csh -f
+
+set REGION = 120.0/300.0/-80.0/89.0
+#set BATHYFILE0=/media/cjimenez/datos/Topografia/gebco30/GridOne.nc
+#set grdfile = cortado.grd
+set grdfile = pacifico.grd
+set i2file = cortado.i2
+set int = 4m
+
+#gmt grdcut $BATHYFILE0 -G$grdfile -R$REGION -V 
+
+gmt grdlandmask -Gsea.grd -I$int -R$REGION -Df -N1/NaN -V
+
+gmt grdmath $grdfile sea.grd OR = tmp2.grd
+gmt grdclip tmp2.grd -Sa-1/-1 -G$i2file=bs -V
+
+rm tmp2.grd
+rm sea.grd
+rm $grdfile
+#rm cortado.grd
+

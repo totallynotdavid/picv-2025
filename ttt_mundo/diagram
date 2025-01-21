@@ -1,0 +1,58 @@
+#!/bin/csh -f
+
+set REGION = -77/-69/-23/-16
+set SIZE = M16c
+set i2file = cortado.i2
+set cptfile = color.cpt
+set psfile = diagram.ps
+set AXIS = a2f1WeSn
+
+gmt set FONT_ANNOT_PRIMARY 10
+gmt set FONT_LABEL 10
+gmt set FONT_TITLE 10
+gmt set PS_MEDIA A4
+
+gmt makecpt -Cglobe -Z > $cptfile
+gmt grdimage $i2file=bs -J$SIZE -R$REGION -C$cptfile -K -P -X3.0c -Y5.0c -V \
+> $psfile
+
+gmt pscoast -J$SIZE -R$REGION -B$AXIS -N1 -G150 -W1,30 -Dh -K -O -V \
+-Lf-90.0/-28.0/-11.0/400+lkm >> $psfile
+	
+# Aftershocks
+awk '{print $3, $2}' replicas.txt | gmt psxy -R$REGION -J$SIZE -Sc0.18 -G255/0/0 -W0.5 -P -O -K >> $psfile
+
+# Mainshock June 2001
+#gmt psxy -J$SIZE -R$REGION -Sa0.6c -G0/0/139 -W1/255 -P -K -O -V \
+#<<END >> $psfile
+#-73.64 -16.26
+#END
+
+# Station aric (28 min)
+set ttt1grd = aric.b
+gmt grdcontour $ttt1grd=bf -J$SIZE -R$REGION -A28f10 -Gd5c -Wa1,30,- -L1/28 -K -O -V >> $psfile
+
+# Station 1 (126 min)
+#set ttt1grd = dart32412.b
+#gmt grdcontour $ttt1grd=bf -J$SIZE -R$REGION -A126f10 -Gd5c -Wa1,30,- -L1/126 -K -O -V >> $psfile
+
+# Station 2 (18 min)
+set ttt2grd = dart32401.b
+gmt grdcontour $ttt2grd=bf -J$SIZE -R$REGION -A18f10 -Gd5c \
+-Wa1,30,- -L1/18 -K -O -V >> $psfile
+	
+# Station 3 (58 min)
+set ttt3grd = dart32402.b
+gmt grdcontour $ttt3grd=bf -J$SIZE -R$REGION -A58f10 -Gd5c \
+-Wa1,30,- -L1/58 -K -O -V >> $psfile
+
+# Station 4 (216 min)
+set ttt3grd = dart32413.b
+gmt grdcontour $ttt3grd=bf -J$SIZE -R$REGION -A216f10 -Gd5c \
+-Wa1,30,- -L1/216 -K -O -V >> $psfile
+
+awk '{ print $3, $2 }' tg.lst | gmt psxy -J$SIZE -R$REGION -St0.42c -G255/255/0 -W0.5 -P -K -O -V >> $psfile
+awk '{ print $3, $2, 10, 0, 0, "CT", $1 }' tg.lst | gmt pstext -J$SIZE \
+-R$REGION -P -O -V -K >> $psfile
+	
+evince $psfile &

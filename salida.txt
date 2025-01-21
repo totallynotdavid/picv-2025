@@ -1,0 +1,28 @@
+ESTIMACION DEL TIEMPO DE ARRIBO DE TSUNAMIS
+Coordenadas del epicentro:
+Fecha    = 21 Ene 2025
+Hora     = 0000
+Latitud  =   56.00
+Longitud = -156.00
+Profund  =  12.0 km
+Magnitud = 9.0
+Tiempo actual: 20250121 1044
+Departamento Puertos    Hora_llegada  Hmax(m)  T_arribo
+Tumbes      La Cruz        14: 7      0.16     14: 7
+Piura       Talara         13:29      0.24     13:29
+Piura       Paita          13:49      0.12     13:49
+Lambayeque  Pimentel       14:47      0.07     14:47
+La_Libertad Salaverry      14:47      0.16     14:47
+Ancash      Chimbote       14:44      0.19     14:44
+Ancash      Huarmey        14:36      0.24     14:36
+Lima        Huacho         14:37      0.18     14:37
+Lima        Callao         14:46      0.24     14:46
+Lima        Cerro Azul     14:49      0.24     14:49
+Ica         Pisco          14:58      0.15     14:58
+Ica         San Juan       14:52      0.13     14:52
+Arequipa    Atico          15:11      0.07     15:11
+Arequipa    Camana         15:29      0.06     15:29
+Arequipa    Matarani       15:29      0.07     15:29
+Moquegua    Ilo            15:38      0.13     15:38
+Chile       Arica          15:54      0.15     15:54
+* La altura estimada NO considera la fase lunar ni oleaje anomalo

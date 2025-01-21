@@ -1,0 +1,11 @@
+# GMT 6 Session common arguments shelf
+BEGIN GMT 6.0.0
+B	a2g1:Time\40(h):/a0.6g.2::SW
+J	X
+JA	A210/-10/5.0i
+JX	X15.0c/3.0c
+R	0/10/0/4
+X	0
+Y	-4.2c
+@L	9
+END

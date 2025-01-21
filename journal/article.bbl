@@ -1,0 +1,43 @@
+\begin{thebibliography}{}
+
+\bibitem[Imamura et~al., 2006]{Ima2006}
+Imamura, F., Yalciner, A., and Ozyurt, G. (2006).
+\newblock {\em Tsunami Modelling Manual ({TUNAMI} model)}.
+\newblock Tohoku University, Sendai, 1 edition.
+
+\bibitem[Jimenez et~al., 2018]{Jim2018}
+Jimenez, C., Carbonel, C., and Rojas, J. (2018).
+\newblock Numerical procedure to forecast the tsunami parameters from a
+  database of pre-simulated seismic unit sources.
+\newblock {\em Pure Appl. Geophys.}, 175:1473--1483.
+
+\bibitem[Okada, 1992]{Oka1992}
+Okada, Y. (1992).
+\newblock Internal deformation due to shear and tensile faults in a half space.
+\newblock {\em Bulletin of Seismological Society of America}, 82:1018--1040.
+
+\bibitem[Papazachos et~al., 2004]{Pap2004}
+Papazachos, B., Scordilis, E., Panagiotopoulus, C., and Karakaisis, G. (2004).
+\newblock Global relations between seismic fault parameters and moment
+  magnitude of earthquakes.
+\newblock {\em Bulletin of Geological Society of Greece}, XXXVI:1482--1489.
+
+\bibitem[Satake, 2015]{Sat2015}
+Satake, K. (2015).
+\newblock {\em Tsunamis, inverse problem of: {E}ncyclopedia of {C}omplexity and
+  {S}ystems {S}cience}.
+\newblock Springer, New York.
+
+\bibitem[Wang et~al., 2012]{Wan2012}
+Wang, D., Becker, N., Walsh, D., Fryer, G., Weinstein, S., McCreery, C., and
+  Sardiña, V. (2012).
+\newblock Real-time forecasting of the {A}pril 11, 2012 {S}umatra tsunami.
+\newblock {\em Geophysical Research Letters}, 39(L19601):1--6.
+
+\bibitem[Wessel, 2009]{Wes2009}
+Wessel, P. (2009).
+\newblock Analysis of observed and predicted tsunami travel times for the
+  {P}acific and {I}ndian {O}ceans.
+\newblock {\em Pure Appl. Geophys.}, 166:301--324.
+
+\end{thebibliography}

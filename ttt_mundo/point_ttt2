@@ -1,0 +1,43 @@
+#!/bin/csh -f
+
+set lon0 = 210
+set lat0 = 0
+set REGION = 120.0/292.0/-80.0/80.0
+set SIZE = A$lon0/$lat0/4.0i
+set AXIS = a20f10WsNe
+set grdfile = cortado.i2
+set cptfile = color.cpt
+set tttbfile = ttt.b
+set psfile = ttt.ps
+set cmtfile = ../meca.dat
+
+gmt set MAP_FRAME_TYPE=plain
+gmt set FONT_ANNOT_PRIMARY 11
+gmt set FONT_LABEL 11
+gmt set FONT_TITLE 11
+gmt set PS_MEDIA A4
+
+gmt makecpt -Cglobe -Z > $cptfile
+
+gmt grdimage $grdfile=bs -R$REGION -J$SIZE -C$cptfile -K -P >> $psfile
+
+gmt pscoast -R$REGION -J$SIZE -B$AXIS -Dl -N1 -W0.5,40 -G155 -P -O -K >> $psfile
+
+#gmt grdcontour $tttbfile=bf -R$REGION -J$SIZE -C60 -A60f16 -Wc.5,30,- -Wa.5,30,- -K -O -P -V >> $psfile
+gmt grdcontour $tttbfile=bf -R$REGION -J$SIZE -C1 -A1.f1+uh -Wc.5,30,- -Wa.5,30,- -K -O -P -V >> $psfile
+#gmt grdcontour $tttbfile=bf -R$REGION -J$SIZE -C1 -A1+f9p -Wc.5,30,- -Wa.5,30,- -K -O -P -V >> $psfile
+#gmt grdcontour $dspgrid -J$SIZE -R$REGION -C0.02 -A0.02+f9p -W0.10,255/0/0 -L0.001/10 -K -O -V >> $psfile
+
+#Mecanismo Focal CMT 
+gmt psmeca $cmtfile -R$REGION -J$SIZE -Sa0.29c -G0/0/0 -P -O -V -K >> $psfile
+#gmt psmeca -R$REGION -J$SIZE -Sa0.32c -G0/0/0 -P -O -V -K <<EOF>> $psfile
+#-78.00 -12.00  21.0 330 15 90 8.1 0 0 
+#EOF
+
+#awk '{ print $3, $2 }' tg.lst | gmt psxy -J$SIZE -R$REGION -St0.42c -G0/0/255 -W0.5 -K -O -V >> $psfile
+
+#awk '{ print $3, $2, 12, 0, 0, "LT", $1 }' tg.lst | gmt pstext -J$SIZE -R$REGION -O -V >> $psfile
+
+ps2eps $psfile -f
+rm $psfile
+evince ttt.eps &

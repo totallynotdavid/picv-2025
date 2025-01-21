@@ -1,0 +1,38 @@
+#!/bin/csh -f
+#mkdir zfolder 
+clear
+echo 'Estimación rápida de parámetros de tsunami de origen lejano'
+chmod 775 fault_plane
+./fault_plane
+chmod 775 deform
+./deform
+chmod 775 tsunami
+./tsunami
+echo 'Mapa de energia'
+chmod 775 espejo
+chmod 775 maxola.csh
+./maxola.csh
+chmod 775 ttt_max
+chmod 775 mareograma.csh
+chmod 775 mareograma1.csh
+chmod 775 mareograma2.csh
+./ttt_max
+echo 'Mareogramas ...'
+#./mareograma.csh
+echo 'Tiempo de arribo ...'
+cd ttt_mundo
+chmod 775 ttt_inverso
+chmod 775 inverse
+chmod 775 point_ttt
+./ttt_inverso
+./point_ttt
+cp ttt.eps ../ttt.eps
+cd ..
+chmod 775 reporte
+./reporte
+pdflatex reporte.tex
+evince reporte.pdf &
+gedit salida.txt &
+rm reporte.aux
+rm reporte.log
+
