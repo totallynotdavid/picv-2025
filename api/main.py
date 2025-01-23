@@ -1,9 +1,11 @@
 import os
 import numpy as np
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 from typing import Tuple, Dict, Any
 
 app = Flask(__name__)
+CORS(app)
 
 # Constantes globales
 RADIO_TIERRA = 6371.0  # Radio de la Tierra en kilómetros
@@ -120,6 +122,7 @@ def calcular_parámetros_fuente() -> Tuple[jsonify, int]:
     except Exception as e:
         return jsonify({"error": f"Error inesperado: {str(e)}"}), 500
 
+
 # TODO: Error convirtiendo el string
 @app.route("/api/tsunami/rupture_rectangle", methods=["POST"])
 def calcular_rectángulo_ruptura() -> Tuple[jsonify, int]:
@@ -196,4 +199,4 @@ def calcular_rectángulo_ruptura() -> Tuple[jsonify, int]:
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
