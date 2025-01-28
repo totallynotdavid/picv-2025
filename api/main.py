@@ -9,8 +9,8 @@ app = Flask(__name__)
 CORS(app)
 
 # Constantes globales
-RADIO_TIERRA = 6371.0  # Radio de la Tierra en kilómetros
-MÓDULO_CORTE = 4.5e10  # Módulo de corte para cálculos de momento sísmico
+RADIO_TIERRA = 6371.0     # Radio de la Tierra en kilómetros
+MÓDULO_CORTE = 4.5e10     # Módulo de corte para cálculos de momento sísmico
 CONSTANTE_MOMENTO = 1e21  # Constante para normalización del momento sísmico
 
 
@@ -122,81 +122,6 @@ def calcular_parámetros_fuente() -> Tuple[jsonify, int]:
 
     except Exception as e:
         return jsonify({"error": f"Error inesperado: {str(e)}"}), 500
-
-
-# TODO: Error convirtiendo el string
-@app.route("/api/tsunami/rupture_rectangle", methods=["POST"])
-def calcular_rectángulo_ruptura() -> Tuple[jsonify, int]:
-    """
-    Calcula las coordenadas del rectángulo de ruptura para un evento sísmico.
-
-    Retorna:
-        Tuple[jsonify, int]: Coordenadas del rectángulo de ruptura y código de estado HTTP
-    """
-    try:
-        datos = request.get_json()
-
-        L = float(datos.get("Largo"))
-        W = float(datos.get("Ancho"))
-        lon0 = float(datos.get("lon0"))
-        lat0 = float(datos.get("lat0"))
-
-        azimut, echado = obtener_mecanismo_focal(lon0, lat0)
-
-        # Cálculos optimizados usando NumPy
-        L1 = L * 1000
-        W1 = 1000 * W * np.cos(np.deg2rad(echado))
-
-        beta = np.rad2deg(np.arctan(W1 / L1))
-        alfa = azimut - 270
-        h1 = np.sqrt(L1**2 + W1**2)
-
-        a1 = 0.5 * h1 * np.sin(np.deg2rad(alfa + beta)) / 1000
-        b1 = 0.5 * h1 * np.cos(np.deg2rad(alfa + beta)) / 1000
-
-        xo = lon0 + b1 / 110
-        yo = lat0 - a1 / 110
-
-        # Cálculo de coordenadas del rectángulo usando NumPy
-        dip = np.deg2rad(echado)
-        a1 = np.deg2rad(-(azimut - 90))
-        a2 = np.deg2rad(-azimut)
-
-        r1 = L1 / (60 * 1853)
-        r2 = W1 / (60 * 1853)
-
-        sx = (
-            np.array(
-                [
-                    0,
-                    r1 * np.cos(a1),
-                    r1 * np.cos(a1) + r2 * np.cos(a2),
-                    r2 * np.cos(a2),
-                    0,
-                ]
-            )
-            + xo
-        )
-        sy = (
-            np.array(
-                [
-                    0,
-                    r1 * np.sin(a1),
-                    r1 * np.sin(a1) + r2 * np.sin(a2),
-                    r2 * np.sin(a2),
-                    0,
-                ]
-            )
-            + yo
-        )
-
-        return jsonify({"rect_x": sx.tolist(), "rect_y": sy.tolist()}), 200
-
-    except Exception as e:
-        return (
-            jsonify({"error": f"Error al calcular rectángulo de ruptura: {str(e)}"}),
-            500,
-        )
 
 @app.route("/api/calculate-tsunami", methods=["POST"])
 def mock_calculate_tsunami():
