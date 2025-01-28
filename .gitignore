@@ -1,1 +1,3 @@
 */ruff_cache/*
+*.npy
+**/__pycache__/*
