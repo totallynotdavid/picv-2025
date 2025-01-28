@@ -1,17 +1,21 @@
 import os
 from datetime import datetime
 import numpy as np
-from flask import Flask, request, jsonify
+import subprocess
+from pathlib import Path
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from typing import Tuple, Dict, Any
 
 app = Flask(__name__)
 CORS(app)
 
-# Constantes globales
-RADIO_TIERRA = 6371.0     # Radio de la Tierra en kilómetros
-MÓDULO_CORTE = 4.5e10     # Módulo de corte para cálculos de momento sísmico
+# Constantes
+RADIO_TIERRA = 6371.0  # Radio de la Tierra en kilómetros
+MÓDULO_CORTE = 4.5e10  # Módulo de corte para cálculos de momento sísmico
 CONSTANTE_MOMENTO = 1e21  # Constante para normalización del momento sísmico
+MODEL_PATH = Path("model")
+INPUT_FILE = MODEL_PATH / "pfalla.inp"
 
 
 def calcular_distancia_geodésica(
@@ -53,13 +57,9 @@ def obtener_mecanismo_focal(
     """
     try:
         mecfoc = np.loadtxt(ruta_mecfoc, delimiter=",")
-
-        # Cálculo de distancias optimizado
         distancias = np.sqrt((mecfoc[:, 0] - lon0) ** 2 + (mecfoc[:, 1] - lat0) ** 2)
         índice_más_cercano = np.argmin(distancias)
-
         return mecfoc[índice_más_cercano, 2], mecfoc[índice_más_cercano, 3]
-
     except FileNotFoundError:
         raise FileNotFoundError(
             f"El archivo de mecanismo focal no se encuentra en {ruta_mecfoc}"
@@ -84,6 +84,63 @@ def validar_parámetros(datos: Dict[str, Any]) -> bool:
     )
 
 
+def validate_model_parameters(data):
+    """
+    Validates input parameters and their ranges for the model
+    """
+    required_params = {
+        "Mw": (5.0, 9.5),  # Min and max magnitude
+        "h": (0, 700),  # Depth range in km
+        "lat0": (-90, 90),  # Latitude range
+        "lon0": (-180, 180),  # Longitude range
+    }
+
+    for param, (min_val, max_val) in required_params.items():
+        if param not in data:
+            raise ValueError(f"Missing parameter: {param}")
+
+        value = float(data[param])
+        if not min_val <= value <= max_val:
+            raise ValueError(f"{param} must be between {min_val} and {max_val}")
+
+
+def create_input_file(data):
+    """
+    Creates the input file for the model
+    """
+    input_content = (
+        f"{data['lat0']:.4f} {data['lon0']:.4f}\n{data['h']:.1f}\n{data['Mw']:.1f}\n"
+    )
+
+    with open(INPUT_FILE, "w") as f:
+        f.write(input_content)
+
+
+def run_tsunami_model():
+    """
+    Runs the tsunami model and returns the PDF path
+    """
+    try:
+        # Ensure job.run is executable
+        job_script = MODEL_PATH / "job.run"
+        job_script.chmod(0o755)
+
+        # Run the model
+        subprocess.run(
+            ["./job.run"], cwd=MODEL_PATH, capture_output=True, text=True, check=True
+        )
+
+        # Check if PDF was generated
+        pdf_path = MODEL_PATH / "reporte.pdf"
+        if not pdf_path.exists():
+            raise FileNotFoundError("PDF report was not generated")
+
+        return pdf_path
+
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Model execution failed: {e.stdout}\n{e.stderr}")
+
+
 @app.route("/api/tsunami/source_params", methods=["POST"])
 def calcular_parámetros_fuente() -> Tuple[jsonify, int]:
     """
@@ -99,7 +156,7 @@ def calcular_parámetros_fuente() -> Tuple[jsonify, int]:
             return jsonify({"error": "Parámetros inválidos o incompletos"}), 400
 
         Mw = float(datos["Mw"])
-        h = float(datos["h"])
+        # h = float(datos["h"])
         lat0 = float(datos["lat0"])
         lon0 = float(datos["lon0"])
 
@@ -123,33 +180,49 @@ def calcular_parámetros_fuente() -> Tuple[jsonify, int]:
     except Exception as e:
         return jsonify({"error": f"Error inesperado: {str(e)}"}), 500
 
+
 @app.route("/api/calculate-tsunami", methods=["POST"])
-def mock_calculate_tsunami():
-    """Mock endpoint for tsunami calculation"""
-    return jsonify({
-        "id": "mock-calculation-001",
-        "timestamp": datetime.now().isoformat(),
-        "input_parameters": {
-            "magnitude": 7.8,
-            "depth": 30,
-            "latitude": -33.4569,
-            "longitude": -70.6483
-        },
-        "results": {
-            "max_wave_height": 5.2,
-            "arrival_time": "2024-01-20T15:30:00Z",
-            "inundation_distance": 2.1,
-            "alert_level": "high",
-            "wave_propagation": {
-                "times": [0, 10, 20, 30, 40, 50],
-                "heights": [0, 1.2, 2.5, 4.1, 5.2, 4.8]
+def calculate_tsunami():
+    """
+    Endpoint to run tsunami model and return PDF report
+    """
+    try:
+        data = request.get_json()
+
+        validate_model_parameters(data)
+
+        create_input_file(data)
+
+        pdf_path = run_tsunami_model()
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_filename = f"tsunami_report_{timestamp}.pdf"
+
+        return send_file(
+            pdf_path,
+            mimetype="application/pdf",
+            as_attachment=True,
+            download_name=output_filename,
+        )
+
+    except ValueError as e:
+        return jsonify(
+            {
+                "error": "Validation error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat(),
             }
-        },
-        "metadata": {
-            "calculation_duration": 0.5,
-            "model_version": "mock-1.0.0"
-        }
-    }), 200
+        ), 400
+
+    except Exception as e:
+        return jsonify(
+            {
+                "error": "Processing error",
+                "message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            }
+        ), 500
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
