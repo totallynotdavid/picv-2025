@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 import numpy as np
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -197,6 +198,33 @@ def calcular_rectángulo_ruptura() -> Tuple[jsonify, int]:
             500,
         )
 
+@app.route("/api/calculate-tsunami", methods=["POST"])
+def mock_calculate_tsunami():
+    """Mock endpoint for tsunami calculation"""
+    return jsonify({
+        "id": "mock-calculation-001",
+        "timestamp": datetime.now().isoformat(),
+        "input_parameters": {
+            "magnitude": 7.8,
+            "depth": 30,
+            "latitude": -33.4569,
+            "longitude": -70.6483
+        },
+        "results": {
+            "max_wave_height": 5.2,
+            "arrival_time": "2024-01-20T15:30:00Z",
+            "inundation_distance": 2.1,
+            "alert_level": "high",
+            "wave_propagation": {
+                "times": [0, 10, 20, 30, 40, 50],
+                "heights": [0, 1.2, 2.5, 4.1, 5.2, 4.8]
+            }
+        },
+        "metadata": {
+            "calculation_duration": 0.5,
+            "model_version": "mock-1.0.0"
+        }
+    }), 200
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
