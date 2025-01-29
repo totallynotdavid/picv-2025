@@ -1,3 +1,4 @@
+import logging
 import os
 import subprocess
 from datetime import datetime
@@ -9,6 +10,14 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, field_validator
 from scipy.interpolate import RegularGridInterpolator
 from scipy.io import loadmat
+
+# Configure logging
+logging.basicConfig(
+    filename="tsunami_api.log",
+    level=logging.DEBUG,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Tsunami Analysis API")
 
@@ -60,81 +69,82 @@ class TsunamiCalculator:
         self._load_data()
 
     def _load_data(self):
-        """Load required data files for bathymetry and coastline."""
         try:
-            # Load 'pacifico.mat' which contains bathymetry data
             pacifico_path = self.data_path / "pacifico.mat"
             pacifico = loadmat(pacifico_path)
 
-            # Extract variables from 'pacifico.mat'
-            # According to your inspection, available variables are 'xa', 'ya', and 'A'
-            self.xa = pacifico["xa"].flatten()  # Shape: (2017,)
-            self.ya = pacifico["ya"].flatten()  # Shape: (1501,)
-            self.bathymetry = pacifico["A"]  # Shape: (1501, 2017)
+            self.xa = pacifico["xa"].flatten()
+            self.ya = pacifico["ya"].flatten()
+            self.bathymetry = pacifico["A"]
 
-            # Adjust longitude values by subtracting 360 as per your original validators
-            self.vlon = self.xa - 360  # Now longitude ranges are adjusted accordingly
-            self.vlat = self.ya  # Latitude values remain the same
+            logger.debug("xa: %s", self.xa)
+            logger.debug("ya: %s", self.ya)
+            logger.debug("bathymetry shape: %s", self.bathymetry.shape)
 
-            # Ensure that latitude is in increasing order for RegularGridInterpolator
+            self.vlon = self.xa - 360
+            self.vlat = self.ya
+
+            logger.debug("vlon: %s", self.vlon)
+            logger.debug("vlat: %s", self.vlat)
+
             if self.vlat[0] > self.vlat[-1]:
                 self.vlat = self.vlat[::-1]
                 self.bathymetry = self.bathymetry[::-1, :]
 
-            # Create interpolator for bathymetry using RegularGridInterpolator
             self.bathy_interpolator = RegularGridInterpolator(
-                (self.vlat, self.vlon),  # (latitude, longitude)
+                (self.vlat, self.vlon),
                 self.bathymetry,
                 bounds_error=False,
-                fill_value=None,  # Returns NaN for out-of-bounds queries
+                fill_value=None,
             )
 
-            # Load 'maper1.mat' which contains coastline data
             maper1_path = self.data_path / "maper1.mat"
             maper1 = loadmat(maper1_path)
+            self.maper1 = maper1["A"]
 
-            # Extract coastline variables
-            self.maper1 = maper1["A"]  # Adjust the key if different
-
-            print("Data loaded successfully.")
+            logger.debug("Data loaded successfully.")
 
         except FileNotFoundError as fnf_error:
-            print(f"Error: {fnf_error}")
+            logger.exception(f"Error loading data files: {fnf_error}")
             raise
         except KeyError as key_error:
-            print(f"Error: Missing key in the .mat file - {key_error}")
+            logger.exception(f"Error: Missing key in .mat file: {key_error}")
             raise
         except Exception as e:
-            print(f"An unexpected error occurred while loading data: {e}")
+            logger.exception(f"An unexpected error occurred: {e}")
             raise
 
     def calculate_earthquake_parameters(
         self, data: EarthquakeInput
     ) -> CalculationResponse:
-        """Calculate earthquake parameters with precise calculations"""
-        # Precise empirical relationships
-        L = 10 ** (0.55 * data.Mw - 2.19)  # Length in km
-        W = 10 ** (0.31 * data.Mw - 0.63)  # Width in km
-        M0 = 10 ** (1.5 * data.Mw + 9.1)  # Seismic moment in N*m
-        u = 4.5e10  # Rigidity coefficient in N/m²
-        D = M0 / (u * (L * 1000) * (W * 1000))  # Dislocation in meters
+        L = 10 ** (0.55 * data.Mw - 2.19)
+        W = 10 ** (0.31 * data.Mw - 0.63)
+        M0 = 10 ** (1.5 * data.Mw + 9.1)
+        u = 4.5e10
+        D = M0 / (u * (L * 1000) * (W * 1000))
 
-        # Get focal mechanism
+        logger.debug("L: %s", L)
+        logger.debug("W: %s", W)
+        logger.debug("M0: %s", M0)
+        logger.debug("D: %s", D)
+
         azimuth, dip = self._get_focal_mechanism(data.lon0, data.lat0)
-
-        # Calculate distance to coast
         distance_to_coast = self._calculate_distance_to_coast(data.lon0, data.lat0)
 
-        # Determine location and depth
-        h0 = self.bathy_interpolator(data.lon0, data.lat0)[0]
-        location = self._determine_epicenter_location(h0, distance_to_coast)
+        logger.debug("azimuth: %s", azimuth)
+        logger.debug("dip: %s", dip)
+        logger.debug("distance_to_coast: %s", distance_to_coast)
 
-        # Determine warning level
+        h0 = self.bathy_interpolator((data.lat0, data.lon0))
+        location = self._determine_epicenter_location(h0, distance_to_coast)
         warning = self._determine_tsunami_warning(
             data.Mw, data.h, h0, distance_to_coast
         )
 
-        # Write to hypo.dat for job.run
+        logger.debug("h0: %s", h0)
+        logger.debug("location: %s", location)
+        logger.debug("warning: %s", warning)
+
         self._write_hypo_dat(data)
 
         return CalculationResponse(
@@ -150,32 +160,44 @@ class TsunamiCalculator:
         )
 
     def _get_focal_mechanism(self, lon0: float, lat0: float) -> Tuple[float, float]:
-        """Get focal mechanism from mecfoc.dat"""
         mech_data = np.loadtxt(self.data_path / "mecfoc.dat")
         distances = np.sqrt(
             (mech_data[:, 0] - lon0) ** 2 + (mech_data[:, 1] - lat0) ** 2
         )
         closest_idx = np.argmin(distances)
+
+        logger.debug("mech_data: %s", mech_data)
+        logger.debug("distances: %s", distances)
+        logger.debug("closest_idx: %s", closest_idx)
+
         return mech_data[closest_idx, 2], 18.0
 
     def _calculate_distance_to_coast(self, lon0: float, lat0: float) -> float:
-        """Calculate precise distance to coastline"""
         coast_points = self.maper1[:, :2]
         distances = np.sqrt(
             (coast_points[:, 0] - lon0) ** 2 + (coast_points[:, 1] - lat0) ** 2
         )
-        return np.min(distances) * 111.12  # Convert to km
+        min_distance = np.min(distances) * 111.12
+
+        logger.debug("coast_points: %s", coast_points)
+        logger.debug("distances: %s", distances)
+        logger.debug("min_distance: %s", min_distance)
+
+        return min_distance
 
     def calculate_tsunami_travel_times(
         self, data: EarthquakeInput
     ) -> TsunamiTravelResponse:
-        """Calculate precise tsunami travel times"""
         arrival_times = {}
         distances = {}
         time0 = float(data.hhmm[:2]) + float(data.hhmm[2:]) / 60
 
+        logger.debug("time0: %s", time0)
+
         with open(self.data_path / "puertos.txt", "r") as f:
             ports = f.readlines()
+
+        logger.debug("ports: %s", ports)
 
         for port in ports:
             if len(port) < 15:
@@ -192,6 +214,14 @@ class TsunamiCalculator:
             arrival_times[port_name] = self._format_arrival_time(travel_time, data.dia)
             distances[port_name] = distance
 
+            logger.debug(
+                "port_name: %s, port_lat: %s, port_lon: %s",
+                port_name,
+                port_lat,
+                port_lon,
+            )
+            logger.debug("distance: %s, travel_time: %s", distance, travel_time)
+
         epicenter_info = {
             "date": data.dia,
             "time": data.hhmm,
@@ -200,6 +230,8 @@ class TsunamiCalculator:
             "depth": f"{data.h:.0f}",
             "magnitude": f"{data.Mw:.1f}",
         }
+
+        logger.debug("epicenter_info: %s", epicenter_info)
 
         return TsunamiTravelResponse(
             arrival_times=arrival_times,
@@ -210,15 +242,23 @@ class TsunamiCalculator:
     def _calculate_travel_time(
         self, lon0: float, lat0: float, port_lon: float, port_lat: float, time0: float
     ) -> Tuple[float, float]:
-        """Calculate precise tsunami travel time"""
         t1 = np.pi / 2 - lat0 * np.pi / 180
         f1 = lon0 * np.pi / 180
         t2 = np.pi / 2 - port_lat * np.pi / 180
         f2 = port_lon * np.pi / 180
 
+        logger.debug("t1: %s", t1)
+        logger.debug("f1: %s", f1)
+        logger.debug("t2: %s", t2)
+        logger.debug("f2: %s", f2)
+
         cosen = np.sin(t1) * np.sin(t2) * np.cos(f1 - f2) + np.cos(t1) * np.cos(t2)
         alfa = np.arccos(cosen)
         distance = self.R * alfa
+
+        logger.debug("cosen: %s", cosen)
+        logger.debug("alfa: %s", alfa)
+        logger.debug("distance: %s", distance)
 
         if distance >= 750:
             travel_time = distance / 790 + 0.2
@@ -228,6 +268,8 @@ class TsunamiCalculator:
             travel_time = self._calculate_detailed_travel_time(
                 lon0, lat0, port_lon, port_lat, distance, alfa
             )
+
+        logger.debug("travel_time: %s", travel_time)
 
         return distance, travel_time + time0
 
@@ -240,17 +282,20 @@ class TsunamiCalculator:
         distance: float,
         alfa: float,
     ) -> float:
-        """Calculate detailed travel time using bathymetry"""
         vu = np.array([port_lon - lon0, port_lat - lat0]) / distance * 110
         n = 100
         delta = alfa * 180 / np.pi / n
 
         P0 = np.array([lon0, lat0])
-        h = [abs(self.bathy_interpolator(lon0, lat0)[0])]
+        h = [
+            abs(self.bathy_interpolator((lat0, lon0)))
+        ]  # Correct interpolation call
 
         for i in range(n):
             P = P0 + (i + 1) * delta * vu
-            h.append(abs(self.bathy_interpolator(P[0], P[1])[0]))
+            h.append(
+                abs(self.bathy_interpolator((P[1], P[0])))
+            )  # Correct interpolation call
 
         h = np.array(h)
         v = np.sqrt(self.g * h) * 3.6
@@ -268,12 +313,20 @@ class TsunamiCalculator:
         elif 1.4 < travel_time < 3.0:
             travel_time = distance / 690 + 0.2
 
+        logger.debug("vu: %s", vu)
+        logger.debug("n: %s", n)
+        logger.debug("delta: %s", delta)
+        logger.debug("P0: %s", P0)
+        logger.debug("h: %s", h)
+        logger.debug("v: %s", v)
+        logger.debug("integral: %s", integral)
+        logger.debug("travel_time: %s", travel_time)
+
         return travel_time
 
     def _determine_tsunami_warning(
         self, Mw: float, h: float, h0: float, dist_min: float
     ) -> str:
-        """Determine precise tsunami warning level"""
         if h0 > 0 and dist_min < 50:
             return "El epicentro esta en Tierra, pero podría generar Tsunami"
         elif h0 > 0 and dist_min > 50:
@@ -292,13 +345,11 @@ class TsunamiCalculator:
         return "NO genera Tsunami"
 
     def _determine_epicenter_location(self, h0: float, dist_min: float) -> str:
-        """Determine precise epicenter location"""
         if h0 > 0:
             return "tierra" if dist_min > 50 else "tierra cerca de costa"
         return "mar"
 
     def _format_arrival_time(self, time: float, day: str) -> str:
-        """Format arrival time"""
         hour = int(time)
         minute = int((time - hour) * 60)
 
@@ -310,7 +361,6 @@ class TsunamiCalculator:
         return f"{hour:02d}:{minute:02d} {day}{datetime.now().strftime('%b')}"
 
     def _write_hypo_dat(self, data: EarthquakeInput):
-        """Write earthquake parameters to hypo.dat"""
         with open("hypo.dat", "w") as f:
             f.write(f"{data.hhmm}\n")
             f.write(f"{data.lon0:.2f}\n")
@@ -329,6 +379,7 @@ async def calculate_endpoint(data: EarthquakeInput):
     try:
         return calculator.calculate_earthquake_parameters(data)
     except Exception as e:
+        logger.exception("Error in calculate_endpoint: %s", e)  # Log the exception
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -338,6 +389,9 @@ async def tsunami_travel_times_endpoint(data: EarthquakeInput):
     try:
         return calculator.calculate_tsunami_travel_times(data)
     except Exception as e:
+        logger.exception(
+            "Error in tsunami_travel_times_endpoint: %s", e
+        )  # Log the exception
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -345,20 +399,27 @@ async def tsunami_travel_times_endpoint(data: EarthquakeInput):
 async def run_tsdhn():
     """Endpoint to execute the job.run file"""
     try:
-        os.chmod("job.run", 0o775)
+        os.chmod("job.run", 0o775)  # Make script executable
         result = subprocess.run(
             ["./job.run"], capture_output=True, text=True, check=True
         )
+        logger.info(
+            "TSDHN executed successfully: %s", result.stdout
+        )  # Log successful execution
         return {
             "status": "success",
             "message": "TSDHN execution completed successfully",
             "output": result.stdout,
         }
     except subprocess.CalledProcessError as e:
+        logger.exception(
+            "TSDHN execution failed: %s", e.stderr
+        )  # Log execution failure
         raise HTTPException(
             status_code=500, detail=f"TSDHN execution failed: {e.stderr}"
         ) from e
     except Exception as e:
+        logger.exception("Error executing TSDHN: %s", e)  # Log other errors
         raise HTTPException(
             status_code=500, detail=f"Error executing TSDHN: {str(e)}"
         ) from e
