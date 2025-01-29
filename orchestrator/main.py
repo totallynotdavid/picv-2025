@@ -203,24 +203,36 @@ class TsunamiCalculator:
             if len(port) < 15:
                 continue
 
-            port_name = port[:15].strip()
-            port_lat = float(port[16:24])
-            port_lon = float(port[27:35])
+            parts = port.split()
+            if len(parts) < 3:
+                logger.error(f"Insufficient data in line: '{port.strip()}'")
+                continue
 
-            distance, travel_time = self._calculate_travel_time(
-                data.lon0, data.lat0, port_lon, port_lat, time0
-            )
+            try:
+                port_name = port[:15].strip()
+                port_lon = float(parts[0])
+                port_lat = float(parts[1])
 
-            arrival_times[port_name] = self._format_arrival_time(travel_time, data.dia)
-            distances[port_name] = distance
+                distance, travel_time = self._calculate_travel_time(
+                    data.lon0, data.lat0, port_lon, port_lat, time0
+                )
 
-            logger.debug(
-                "port_name: %s, port_lat: %s, port_lon: %s",
-                port_name,
-                port_lat,
-                port_lon,
-            )
-            logger.debug("distance: %s, travel_time: %s", distance, travel_time)
+                arrival_times[port_name] = self._format_arrival_time(
+                    travel_time, data.dia
+                )
+                distances[port_name] = distance
+
+                logger.debug(
+                    "port_name: %s, port_lat: %s, port_lon: %s",
+                    port_name,
+                    port_lat,
+                    port_lon,
+                )
+                logger.debug("distance: %s, travel_time: %s", distance, travel_time)
+
+            except (ValueError, IndexError) as e:
+                logger.error(f"Error parsing line '{port.strip()}': {e}")
+                continue
 
         epicenter_info = {
             "date": data.dia,
@@ -287,15 +299,11 @@ class TsunamiCalculator:
         delta = alfa * 180 / np.pi / n
 
         P0 = np.array([lon0, lat0])
-        h = [
-            abs(self.bathy_interpolator((lat0, lon0)))
-        ]  # Correct interpolation call
+        h = [abs(self.bathy_interpolator((lat0, lon0)))]
 
         for i in range(n):
             P = P0 + (i + 1) * delta * vu
-            h.append(
-                abs(self.bathy_interpolator((P[1], P[0])))
-            )  # Correct interpolation call
+            h.append(abs(self.bathy_interpolator((P[1], P[0]))))
 
         h = np.array(h)
         v = np.sqrt(self.g * h) * 3.6
@@ -379,7 +387,7 @@ async def calculate_endpoint(data: EarthquakeInput):
     try:
         return calculator.calculate_earthquake_parameters(data)
     except Exception as e:
-        logger.exception("Error in calculate_endpoint: %s", e)  # Log the exception
+        logger.exception("Error in calculate_endpoint: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -389,9 +397,7 @@ async def tsunami_travel_times_endpoint(data: EarthquakeInput):
     try:
         return calculator.calculate_tsunami_travel_times(data)
     except Exception as e:
-        logger.exception(
-            "Error in tsunami_travel_times_endpoint: %s", e
-        )  # Log the exception
+        logger.exception("Error in tsunami_travel_times_endpoint: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -399,27 +405,23 @@ async def tsunami_travel_times_endpoint(data: EarthquakeInput):
 async def run_tsdhn():
     """Endpoint to execute the job.run file"""
     try:
-        os.chmod("job.run", 0o775)  # Make script executable
+        os.chmod("model/job.run", 0o775)
         result = subprocess.run(
-            ["./job.run"], capture_output=True, text=True, check=True
+            ["model/job.run"], capture_output=True, text=True, check=True
         )
-        logger.info(
-            "TSDHN executed successfully: %s", result.stdout
-        )  # Log successful execution
+        logger.info("TSDHN executed successfully: %s", result.stdout)
         return {
             "status": "success",
             "message": "TSDHN execution completed successfully",
             "output": result.stdout,
         }
     except subprocess.CalledProcessError as e:
-        logger.exception(
-            "TSDHN execution failed: %s", e.stderr
-        )  # Log execution failure
+        logger.exception("TSDHN execution failed: %s", e.stderr)
         raise HTTPException(
             status_code=500, detail=f"TSDHN execution failed: {e.stderr}"
         ) from e
     except Exception as e:
-        logger.exception("Error executing TSDHN: %s", e)  # Log other errors
+        logger.exception("Error executing TSDHN: %s", e)
         raise HTTPException(
             status_code=500, detail=f"Error executing TSDHN: {str(e)}"
         ) from e
