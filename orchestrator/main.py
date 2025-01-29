@@ -7,7 +7,7 @@ from typing import Dict, Optional, Tuple
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, field_validator
-from scipy.interpolate import interp2d
+from scipy.interpolate import RegularGridInterpolator
 from scipy.io import loadmat
 
 app = FastAPI(title="Tsunami Analysis API")
@@ -60,28 +60,53 @@ class TsunamiCalculator:
         self._load_data()
 
     def _load_data(self):
-        """Load required data files"""
-        # Load coastline and bathymetry data
-        data = loadmat(self.data_path / "pacifico.mat")
-        self.bathymetry = data["D"]
-        self.maplegend = data["maplegend"][0]
-        self.maper1 = loadmat(self.data_path / "maper1.mat")["A"]
+        """Load required data files for bathymetry and coastline."""
+        try:
+            # Load 'pacifico.mat' which contains bathymetry data
+            pacifico_path = self.data_path / "pacifico.mat"
+            pacifico = loadmat(pacifico_path)
 
-        # Create bathymetry grid
-        self.xllcenter = self.maplegend[3]
-        self.yllcenter = self.maplegend[2]
-        self.cellsize = 0.03333333
+            # Extract variables from 'pacifico.mat'
+            # According to your inspection, available variables are 'xa', 'ya', and 'A'
+            self.xa = pacifico["xa"].flatten()  # Shape: (2017,)
+            self.ya = pacifico["ya"].flatten()  # Shape: (1501,)
+            self.bathymetry = pacifico["A"]  # Shape: (1501, 2017)
 
-        p, q = self.bathymetry.shape
-        self.vlat = np.array(
-            [self.yllcenter - (i - 1) * self.cellsize for i in range(1, p + 1)]
-        )
-        self.vlon = np.array(
-            [self.xllcenter + (j - 1) * self.cellsize for j in range(1, q + 1)]
-        )
+            # Adjust longitude values by subtracting 360 as per your original validators
+            self.vlon = self.xa - 360  # Now longitude ranges are adjusted accordingly
+            self.vlat = self.ya  # Latitude values remain the same
 
-        # Create interpolator for bathymetry
-        self.bathy_interpolator = interp2d(self.vlon, self.vlat, self.bathymetry)
+            # Ensure that latitude is in increasing order for RegularGridInterpolator
+            if self.vlat[0] > self.vlat[-1]:
+                self.vlat = self.vlat[::-1]
+                self.bathymetry = self.bathymetry[::-1, :]
+
+            # Create interpolator for bathymetry using RegularGridInterpolator
+            self.bathy_interpolator = RegularGridInterpolator(
+                (self.vlat, self.vlon),  # (latitude, longitude)
+                self.bathymetry,
+                bounds_error=False,
+                fill_value=None,  # Returns NaN for out-of-bounds queries
+            )
+
+            # Load 'maper1.mat' which contains coastline data
+            maper1_path = self.data_path / "maper1.mat"
+            maper1 = loadmat(maper1_path)
+
+            # Extract coastline variables
+            self.maper1 = maper1["A"]  # Adjust the key if different
+
+            print("Data loaded successfully.")
+
+        except FileNotFoundError as fnf_error:
+            print(f"Error: {fnf_error}")
+            raise
+        except KeyError as key_error:
+            print(f"Error: Missing key in the .mat file - {key_error}")
+            raise
+        except Exception as e:
+            print(f"An unexpected error occurred while loading data: {e}")
+            raise
 
     def calculate_earthquake_parameters(
         self, data: EarthquakeInput
