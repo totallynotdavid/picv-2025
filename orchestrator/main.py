@@ -1,44 +1,408 @@
-import logging
+import os
+import subprocess
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, Optional, Tuple
 
-from api.routes import TsunamiAPI
-from api.validators import ParameterValidator
-from config import Config
-from flask import Flask
-from flask_cors import CORS
-from services.calculation_service import CalculationService
-from services.map_service import MapService
-from services.plot_service import PlotService
-from waitress import serve
+import numpy as np
+import uvicorn
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, validator
+from scipy.interpolate import interp2d
+from scipy.io import loadmat
+
+app = FastAPI(title="Tsunami Analysis API")
 
 
-def create_app(config):
-    """Application factory."""
-    app = Flask(__name__)
-    CORS(app)
+class EarthquakeInput(BaseModel):
+    Mw: float  # Magnitude
+    h: float  # Depth
+    lat0: float  # Latitude
+    lon0: float  # Longitude
+    dia: Optional[str] = "00"  # Day
+    hhmm: Optional[str] = "0000"  # Time
 
-    # Initialize services
-    map_service = MapService(config)
-    calculation_service = CalculationService(config, map_service)
-    plot_service = PlotService(config, map_service)
-    validator = ParameterValidator(config)
+    @validator("lon0")
+    def convert_longitude(cls, v):
+        return v - 360 if v > 0 else v
 
-    # Initialize API
-    api = TsunamiAPI(config, calculation_service, plot_service, validator)
-    api.register_routes(app)
+    @validator("hhmm")
+    def validate_time(cls, v):
+        if len(v) == 0:
+            return "0000"
+        if len(v) < 4:
+            return "0000"
+        if ":" in v:
+            # Convert HH:MM to HHMM format
+            return v.replace(":", "")
+        return v
 
-    return app
+
+class CalculationResponse(BaseModel):
+    length: float  # L (km)
+    width: float  # W (km)
+    dislocation: float  # D (m)
+    seismic_moment: float  # M0 (N*m)
+    tsunami_warning: str
+    distance_to_coast: float
+    azimuth: float
+    dip: float
+    epicenter_location: str
+
+
+class TsunamiTravelResponse(BaseModel):
+    arrival_times: Dict[str, str]
+    distances: Dict[str, float]
+    epicenter_info: Dict[str, str]
+
+
+class DataLoader:
+    def __init__(self):
+        self.data_path = Path("data")
+        self._load_data()
+
+    def _load_data(self):
+        """Load all required .mat files"""
+        # Load coastline data
+        self.maper1 = loadmat(self.data_path / "maper1.mat")["A"]
+        self.maper2 = loadmat(self.data_path / "maper2.mat")["B"]
+        self.maper3 = loadmat(self.data_path / "maper3.mat")["C"]
+
+        # Load bathymetry data
+        bati_data = loadmat(self.data_path / "batiperu.mat")
+        self.bathymetry = bati_data["A"]
+        self.maplegend = bati_data["maplegend"].flatten()
+
+        # Load Pacific ocean data
+        self.pacific = loadmat(self.data_path / "pacifico.mat")
+
+        # Create bathymetry grid
+        self.xllcenter = self.maplegend[3]
+        self.yllcenter = self.maplegend[2]
+        self.cellsize = 0.03333333
+
+        p, q = self.bathymetry.shape
+        self.vlat = np.array(
+            [self.yllcenter - (i - 1) * self.cellsize for i in range(1, p + 1)]
+        )
+        self.vlon = np.array(
+            [self.xllcenter + (j - 1) * self.cellsize for j in range(1, q + 1)]
+        )
+        self.lon_grid, self.lat_grid = np.meshgrid(self.vlon, self.vlat)
+
+        # Create interpolator for bathymetry
+        self.bathy_interpolator = interp2d(self.vlon, self.vlat, self.bathymetry)
+
+
+class TsunamiCalculator:
+    def __init__(self):
+        self.data = DataLoader()
+        self.g = 9.81  # acceleration due to gravity (m/s²)
+        self.R = 6370.8  # Earth radius (km)
+
+    def calculate_earthquake_parameters(
+        self, data: EarthquakeInput
+    ) -> CalculationResponse:
+        """Calculate all earthquake parameters"""
+        # Basic calculations
+        L = 10 ** (0.55 * data.Mw - 2.19)  # Length in km
+        W = 10 ** (0.31 * data.Mw - 0.63)  # Width in km
+        M0 = 10 ** (1.5 * data.Mw + 9.1)  # Seismic moment in N*m
+        u = 4.5e10  # Rigidity coefficient in N/m²
+        D = M0 / (u * (L * 1000) * (W * 1000))  # Dislocation
+
+        # Get focal mechanism
+        azimuth, dip = self._get_focal_mechanism(data.lon0, data.lat0)
+
+        # Calculate distance to coast and determine epicenter location
+        distance_to_coast = self._calculate_distance_to_coast(data.lon0, data.lat0)
+        h0 = self.data.bathy_interpolator(data.lon0, data.lat0)[0]
+        location = self._determine_epicenter_location(h0, distance_to_coast)
+
+        # Determine tsunami warning
+        warning = self._determine_tsunami_warning(
+            data.Mw, data.h, h0, distance_to_coast
+        )
+
+        # Write to hypo.dat
+        self._write_hypo_dat(data)
+
+        return CalculationResponse(
+            length=L,
+            width=W,
+            dislocation=D,
+            seismic_moment=M0,
+            tsunami_warning=warning,
+            distance_to_coast=distance_to_coast,
+            azimuth=azimuth,
+            dip=dip,
+            epicenter_location=location,
+        )
+
+    def calculate_tsunami_travel_times(
+        self, data: EarthquakeInput
+    ) -> TsunamiTravelResponse:
+        """Calculate tsunami travel times to all ports"""
+        arrival_times = {}
+        distances = {}
+
+        # Read ports from file
+        with open(self.data.data_path / "puertos.txt", "r") as f:
+            ports = f.readlines()
+
+        time0 = float(data.hhmm[:2]) + float(data.hhmm[2:]) / 60
+
+        for port in ports:
+            if len(port) < 15:
+                continue
+
+            port_name = port[:15].strip()
+            port_lat = float(port[16:24])
+            port_lon = float(port[27:35])
+
+            # Calculate distance and travel time
+            distance, travel_time = self._calculate_travel_time(
+                data.lon0, data.lat0, port_lon, port_lat, time0
+            )
+
+            # Format arrival time
+            arrival_time = self._format_arrival_time(travel_time, data.dia)
+
+            arrival_times[port_name] = arrival_time
+            distances[port_name] = distance
+
+        # Create epicenter info
+        epicenter_info = {
+            "date": data.dia,
+            "time": data.hhmm,
+            "latitude": f"{data.lat0:.2f}",
+            "longitude": f"{data.lon0:.2f}",
+            "depth": f"{data.h:.0f}",
+            "magnitude": f"{data.Mw:.1f}",
+        }
+
+        return TsunamiTravelResponse(
+            arrival_times=arrival_times,
+            distances=distances,
+            epicenter_info=epicenter_info,
+        )
+
+    def _get_focal_mechanism(self, lon0: float, lat0: float) -> Tuple[float, float]:
+        """Get focal mechanism (azimuth and dip) from mecfoc.dat"""
+        mech_data = np.loadtxt("mecfoc.dat")
+        distances = np.sqrt(
+            (mech_data[:, 0] - lon0) ** 2 + (mech_data[:, 1] - lat0) ** 2
+        )
+        closest_idx = np.argmin(distances)
+        return mech_data[closest_idx, 2], 18.0  # azimuth and fixed dip angle
+
+    def _calculate_distance_to_coast(self, lon0: float, lat0: float) -> float:
+        """Calculate minimum distance to coastline"""
+        coast_points = np.column_stack((self.data.maper1[:, 0], self.data.maper1[:, 1]))
+        distances = np.sqrt(
+            (coast_points[:, 0] - lon0) ** 2 + (coast_points[:, 1] - lat0) ** 2
+        )
+        return np.min(distances) * 111.12  # Convert to km
+
+    def _calculate_travel_time(
+        self, lon0: float, lat0: float, port_lon: float, port_lat: float, time0: float
+    ) -> Tuple[float, float]:
+        """Calculate tsunami travel time to a specific port"""
+        # Calculate great circle distance
+        t1 = np.pi / 2 - lat0 * np.pi / 180
+        f1 = lon0 * np.pi / 180
+        t2 = np.pi / 2 - port_lat * np.pi / 180
+        f2 = port_lon * np.pi / 180
+
+        cosen = np.sin(t1) * np.sin(t2) * np.cos(f1 - f2) + np.cos(t1) * np.cos(t2)
+        alfa = np.arccos(cosen)
+        distance = self.R * alfa
+
+        # Calculate travel time based on distance and region
+        if distance >= 750:
+            travel_time = distance / 790 + 0.2
+        elif (lat0 > 0 or lat0 < -19) and distance < 750:
+            travel_time = distance / 700
+        else:
+            # Calculate using bathymetry
+            travel_time = self._calculate_detailed_travel_time(
+                lon0, lat0, port_lon, port_lat, distance, alfa
+            )
+
+        return distance, travel_time + time0
+
+    def _calculate_detailed_travel_time(
+        self,
+        lon0: float,
+        lat0: float,
+        port_lon: float,
+        port_lat: float,
+        distance: float,
+        alfa: float,
+    ) -> float:
+        """Calculate detailed travel time using bathymetry data"""
+        vu = np.array([port_lon - lon0, port_lat - lat0]) / distance * 110
+        n = 100  # number of partitions
+        delta = alfa * 180 / np.pi / n
+
+        P0 = np.array([lon0, lat0])
+        h = []
+
+        # Calculate depths along the path
+        for i in range(n):
+            P = P0 + (i + 1) * delta * vu
+            h.append(abs(self.data.bathy_interpolator(P[0], P[1])[0]))
+
+        h = np.array([abs(self.data.bathy_interpolator(lon0, lat0)[0])] + h)
+        v = np.sqrt(self.g * h) * 3.6  # speed in km/h
+
+        # Simpson's 1/3 rule integration
+        delta = alfa / n * self.R
+        y = 1 / v
+        integral = (delta / 3) * (
+            y[0] + y[-1] + 4 * np.sum(y[1:-1:2]) + 2 * np.sum(y[2:-1:2])
+        )
+
+        travel_time = 0.50 * integral
+
+        # Apply corrections based on MATLAB code
+        if travel_time > 3.0:
+            travel_time = distance / 733 + 0.25
+        elif 1.4 < travel_time < 3.0:
+            travel_time = distance / 690 + 0.2
+
+        return travel_time
+
+    def _determine_tsunami_warning(
+        self, Mw: float, h: float, h0: float, dist_min: float
+    ) -> str:
+        """Determine tsunami warning level"""
+        if h0 > 0 and dist_min < 50:
+            return "El epicentro esta en Tierra, pero podría generar Tsunami"
+        elif h0 > 0 and dist_min > 50:
+            return "El epicentro esta en Tierra. NO genera Tsunami"
+        elif h0 <= 0:
+            if h > 60 or Mw < 7.0:
+                return "El epicentro esta en el Mar y NO genera Tsunami"
+            elif Mw >= 8.8 and h <= 60:
+                return "Genera un Tsunami grande y destructivo"
+            elif Mw >= 8.3995 and h <= 60:
+                return "Genera un Tsunami potencialmente destructivo"
+            elif Mw >= 7.9 and h <= 60:
+                return "Genera un Tsunami pequeno"
+            elif Mw >= 7.0 and h <= 60:
+                return "Probable Tsunami pequeno y local"
+        return "NO genera Tsunami"
+
+    def _determine_epicenter_location(self, h0: float, dist_min: float) -> str:
+        """Determine if epicenter is on land or sea"""
+        if h0 > 0:
+            return "tierra" if dist_min > 50 else "tierra cerca de costa"
+        return "mar"
+
+    def _format_arrival_time(self, time: float, day: str) -> str:
+        """Format arrival time string"""
+        hour = int(time)
+        minute = int((time - hour) * 60)
+
+        # Handle day rollover
+        day_increment = 0
+        if hour >= 24:
+            hour -= 24
+            day_increment = 1
+
+        # Format strings
+        day = str(int(day) + day_increment).zfill(2)
+        hour = str(hour).zfill(2)
+        minute = str(minute).zfill(2)
+
+        return f"{hour}:{minute} {day}{datetime.now().strftime('%b')}"
+
+    def _write_hypo_dat(self, data: EarthquakeInput):
+        """Write earthquake parameters to hypo.dat"""
+        with open("hypo.dat", "w") as f:
+            f.write(f"{data.hhmm}\n")
+            f.write(f"{data.lon0:.2f}\n")
+            f.write(f"{data.lat0:.2f}\n")
+            f.write(f"{data.h:.0f}\n")
+            f.write(f"{data.Mw:.1f}\n")
+
+
+# Initialize calculator
+calculator = TsunamiCalculator()
+
+
+@app.post("/calculate", response_model=CalculationResponse)
+async def calculate_endpoint(data: EarthquakeInput):
+    """Endpoint for initial earthquake calculations"""
+    try:
+        return calculator.calculate_earthquake_parameters(data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/tsunami-travel-times", response_model=TsunamiTravelResponse)
+async def tsunami_travel_times_endpoint(data: EarthquakeInput):
+    """Endpoint for calculating tsunami travel times"""
+    try:
+        return calculator.calculate_tsunami_travel_times(data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/run-tsdhn")
+async def run_tsdhn():
+    """Endpoint to execute the job.run file"""
+    try:
+        os.chmod("job.run", 0o775)
+        result = subprocess.run(
+            ["./job.run"], capture_output=True, text=True, check=True
+        )
+        return {
+            "status": "success",
+            "message": "TSDHN execution completed successfully",
+            "output": result.stdout,
+        }
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(
+            status_code=500, detail=f"TSDHN execution failed: {e.stderr}"
+        ) from e
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Error executing TSDHN: {str(e)}"
+        ) from e
+
+
+# Add startup event to verify data files and configurations
+@app.on_event("startup")
+async def startup_event():
+    """Verify all required files and configurations on startup"""
+    required_files = [
+        "data/maper1.mat",
+        "data/maper2.mat",
+        "data/maper3.mat",
+        "data/batiperu.mat",
+        "data/pacifico.mat",
+        "mecfoc.dat",
+        "puertos.txt",
+        "job.run",
+    ]
+
+    missing_files = []
+    for file_path in required_files:
+        if not Path(file_path).exists():
+            missing_files.append(file_path)
+
+    if missing_files:
+        raise RuntimeError(f"Missing required files: {', '.join(missing_files)}")
+
+
+# Add health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
 if __name__ == "__main__":
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        handlers=[logging.FileHandler("tsunami_api.log"), logging.StreamHandler()],
-    )
-
-    config = Config()
-    app = create_app(config)
-
-    # Run app with production server
-    serve(app, host="0.0.0.0", port=5000, threads=4)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
