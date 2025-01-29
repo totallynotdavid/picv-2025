@@ -58,7 +58,7 @@ class TsunamiTravelResponse(BaseModel):
 
 class DataLoader:
     def __init__(self):
-        self.data_path = Path("data")
+        self.data_path = Path("model")
         self._load_data()
 
     def _load_data(self):
