@@ -404,10 +404,16 @@ async def tsunami_travel_times_endpoint(data: EarthquakeInput):
 @app.post("/run-tsdhn")
 async def run_tsdhn():
     """Endpoint to execute the job.run file"""
+    model_dir = Path("model")
     try:
-        os.chmod("model/job.run", 0o775)
+        job_run_path = model_dir / "job.run"
+        os.chmod(job_run_path, 0o775)
         result = subprocess.run(
-            ["model/job.run"], capture_output=True, text=True, check=True
+            ["./job.run"],
+            cwd=model_dir,
+            capture_output=True,
+            text=True,
+            check=True,
         )
         logger.info("TSDHN executed successfully: %s", result.stdout)
         return {
