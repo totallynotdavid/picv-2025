@@ -3,7 +3,7 @@ name = "orchestrator"
 version = "0.1.0"
 description = ""
 authors = [
-    {name = "David Duran",email = "dadch1404@gmail.com"}
+  {name = "David Duran",email = "dadch1404@gmail.com"}
 ]
 license = {text = "MIT"}
 readme = "README.md"
@@ -17,7 +17,32 @@ dependencies = [
     "waitress (>=3.0.2,<4.0.0)",
 ]
 
-
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+indent-width = 4
+
+extend-exclude = [
+    "__pycache__",
+    "dist",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "B",
+    "I",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.poe.tasks]
+format = { shell = "ruff format && ruff check --fix" }

@@ -1,5 +1,5 @@
-from typing import Dict, Any
 import logging
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +15,8 @@ class ParameterValidator:
 
         try:
             value = float(data[param])
-        except (TypeError, ValueError):
-            raise ValueError(f"{param} must be a valid number")
+        except (TypeError, ValueError) as err:
+            raise ValueError(f"{param} must be a valid number") from err
 
         min_val, max_val = self.config.PARAM_RANGES.get(param, (None, None))
         if min_val is not None and value < min_val:

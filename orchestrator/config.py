@@ -1,6 +1,7 @@
-from pathlib import Path
 from dataclasses import dataclass, field
-from typing import Dict, Tuple, List
+from pathlib import Path
+from typing import Dict, List, Tuple
+
 
 @dataclass
 class Config:

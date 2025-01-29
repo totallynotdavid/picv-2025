@@ -1,9 +1,10 @@
-import matplotlib.pyplot as plt
+import logging
 from datetime import datetime
+
+import matplotlib.pyplot as plt
 import numpy as np
 from config import Config
 from services.map_service import MapService
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,7 @@ class PlotService:
                 logger.info(f"Plot saved to {self.config.STATIC_DIR / filename}")
             except Exception as e:  # Handle potential save errors
                 logger.error(f"Error saving plot: {e}")
-                return None  # Or raise the exception depending on how you want to handle it
+                return None
 
             plt.close()  # Close the plot to free resources
             return filename

@@ -1,9 +1,11 @@
-from flask import Blueprint, request, jsonify
 import logging
+
+from flask import Blueprint, jsonify, request
 
 logger = logging.getLogger(__name__)
 
 api = Blueprint("api", __name__)
+
 
 class TsunamiAPI:
     def __init__(self, config, calculation_service, plot_service, validator):

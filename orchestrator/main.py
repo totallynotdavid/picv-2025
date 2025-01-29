@@ -1,13 +1,14 @@
 import logging
-from waitress import serve
+
+from api.routes import TsunamiAPI
+from api.validators import ParameterValidator
+from config import Config
 from flask import Flask
 from flask_cors import CORS
-from config import Config
-from services.map_service import MapService
 from services.calculation_service import CalculationService
+from services.map_service import MapService
 from services.plot_service import PlotService
-from api.validators import ParameterValidator
-from api.routes import TsunamiAPI
+from waitress import serve
 
 
 def create_app(config):

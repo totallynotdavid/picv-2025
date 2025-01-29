@@ -1,8 +1,7 @@
-from functools import lru_cache
 import logging
+
 import numpy as np
 import scipy.io as sio  # For reading .mat files
-
 from config import Config
 
 logger = logging.getLogger(__name__)
@@ -13,7 +12,6 @@ class MapService:
         self.config = config
         self.map_data = {}
 
-    @lru_cache(maxsize=1)
     def load_map_data(self):
         """Load and cache map data."""
         try:
