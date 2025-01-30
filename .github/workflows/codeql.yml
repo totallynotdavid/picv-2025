@@ -1,33 +1,31 @@
 name: CodeQL
 
 on:
-    workflow_dispatch:
-    schedule:
-        - cron: '0 11 * * 5' # Viernes a las 11:00
+  workflow_dispatch:
+  schedule:
+    - cron: "0 11 * * 5" # Viernes a las 11:00
 
 permissions:
-    actions: read
-    contents: read
-    security-events: write
+  actions: read
+  contents: read
+  security-events: write
 
 jobs:
-    analyze:
-        runs-on: ubuntu-latest
+  analyze:
+    runs-on: ubuntu-latest
 
-        strategy:
-            fail-fast: false
-            matrix:
-                language: ['python']
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["python"]
 
-        steps:
-            - uses: actions/checkout@v4
+    steps:
+      - uses: actions/checkout@v4
 
-            - uses: github/codeql-action/init@v3
-              with:
-                languages: [ ${{ matrix.language }} ]
+      - uses: github/codeql-action/init@v3
 
-            - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/autobuild@v3
 
-            - uses: github/codeql-action/analyze@v3
-              with:
-                category: "/language:${{matrix.language}}"
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
