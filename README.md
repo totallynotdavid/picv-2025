@@ -1,8 +1,8 @@
 # TSDHN API
 
-El modelo TSDHN permite la estimación de parámetros de tsunamis de origen lejano mediante simulaciones numéricas. Este repositorio contiene la TSDHN API, una interfaz desarrollada con FastAPI que facilita la comunicación entre [picv-2025-web](https://github.com/totallynotdavid/picv-2025-web) y el [modelo TSDHN](https://github.com/totallynotdavid/picv-2025/tree/main/model).
+El modelo TSDHN permite la estimación de parámetros de tsunamis de origen lejano mediante simulaciones numéricas. Este repositorio contiene la API TSDHN, una interfaz desarrollada con FastAPI que facilita la comunicación entre [picv-2025-web](https://github.com/totallynotdavid/picv-2025-web) y el [modelo TSDHN](https://github.com/totallynotdavid/picv-2025/tree/main/model).
 
-El flujo de trabajo de la TSDHN API se describe en el siguiente diagrama:
+El siguiente diagrama describe el flujo de trabajo de la API TSDHN:
 
 ```mermaid
 flowchart TB
@@ -37,14 +37,11 @@ flowchart TB
 ## Instalación
 
 > [!WARNING]
-> Este repositorio funciona únicamente en sistemas operativos Linux. Una gran parte del pipeline de la TSDHN API depende de scripts C shell, por lo que inicialmente no es compatible con Windows. Tengo planeado migrar totalmente a Python en el futuro, aunque puede que tome tiempo debido a la complejidad.
+> Esta API funciona solo en sistemas operativos Linux debido a su dependencia de scripts C shell. No es compatible con Windows de forma nativa. Se recomienda usar Windows Subsystem for Linux (WSL) para usuarios de Windows. [Instalación de WSL](https://learn.microsoft.com/es-es/windows/wsl/install)
 
-**Pre-requisitos:** Ubuntu 20.04, Python 3.10 (api), matlab 2014, gfortran, csh, poetry.
+**Pre-requisitos:** Ubuntu 20.04, Python 3.10, MATLAB R2014, gfortran, csh, poetry.
 
-> [!TIP]
-> En mi caso utilizo WSL para trabajar en Windows. Si tienes actualizado tu OS, la instalación es bastante sencilla: https://learn.microsoft.com/en-us/windows/wsl/install
-
-Habiendo instalado los pre-requisitos, se puede proceder con la instalación de la TSDHN API:
+Para instalar la API TSDHN:
 
 ```bash
 git clone https://github.com/totallynotdavid/picv-2025
@@ -53,32 +50,37 @@ poetry install
 eval $(poetry env activate)
 ```
 
-Para verificar que todo está correctamente instalado, ejecuta la suite de pruebas con `poetry run pytest`.
+**Consejo**: Verifica la instalación ejecutando las pruebas: `poetry run pytest`.
 
-El modelo requiere de los siguientes **parámetros de entrada** para la simulación:
+## Parámetros de entrada
 
-| Parámetro           | Descripción                  | Unidad            |
-| ------------------- | ---------------------------- | ----------------- |
-| Hora de origen      | Momento exacto del terremoto | Timestamp         |
-| Longitud            | Coordenada geográfica        | Grados            |
-| Latitud             | Coordenada geográfica        | Grados            |
-| Profundidad focal   | Profundidad del terremoto    | Kilómetros        |
-| Magnitud de momento | Escala de intensidad sísmica | Mw (adimensional) |
+El modelo requiere los siguientes **parámetros de entrada** para la simulación:
+
+| Parámetro           | Descripción                         | Unidad            |
+| ------------------- | ----------------------------------- | ----------------- |
+| Hora de origen      | Momento exacto del terremoto        | Timestamp         |
+| Longitud            | Coordenada geográfica del epicentro | Grados            |
+| Latitud             | Coordenada geográfica del epicentro | Grados            |
+| Profundidad focal   | Profundidad del hipocentro          | Kilómetros        |
+| Magnitud de momento | Escala de intensidad sísmica        | Mw (adimensional) |
 
 ## Endpoints
 
-La API expone cuatro endpoints:
+La API expone los siguientes endpoints:
 
-1. [`/calculate`](orchestrator/main.py?plain=1#L25): Calcula los parámetros sísmicos de un terremoto de origen lejano.
-2. [`/tsunami-travel-times`](orchestrator/main.py?plain=1#L43): Calcula los tiempos de arribo de un tsunami en las costas peruanas.
-3. [`/run-tsdhn`](orchestrator/main.py?plain=1#L59): Ejecuta la simulación del modelo TSDHN.
-4. [`/health`](orchestrator/main.py?plain=1#L88): Verifica el estado de la API.
+1. [`/calculate`](orchestrator/main.py?plain=1#L25): Calcula los parámetros sísmicos del terremoto.
+2. [`/tsunami-travel-times`](orchestrator/main.py?plain=1#L43): Calcula los tiempos de arribo del tsunami a las costas peruanas, basándose en el archivo [`puertos.txt`](model/puertos.txt).
+3. [`/run-tsdhn`](orchestrator/main.py?plain=1#L59): Ejecuta la simulación numérica del modelo TSDHN.
+4. [`/health`](orchestrator/main.py?plain=1#L88): Endpoint para verificar el estado de la API.
 
-Los primeros tres endpoints deben ejecutarse en ese orden ya que cada uno depende del anterior. El endpoint `/health` es opcional y se utiliza para verificar el estado de la API.
+> [!WARNING]
+> Los primeros tres endpoints deben ejecutarse en ese orden ya que cada uno depende del anterior.
 
 ### `/calculate`
 
-Este endpoint procesa los parámetros sísmicos de un terremoto de origen lejano y devuelve un objeto JSON con los resultados. Por ejemplo, una solicitud típica podría verse así:
+Este endpoint recibe los parámetros del terremoto y calcula parámetros sísmicos adicionales.
+
+Ejemplo de solicitud (POST):
 
 ```json
 POST /calculate
@@ -110,19 +112,19 @@ La respuesta incluirá parámetros como la longitud y ancho de ruptura, desplaza
 
 ### `/tsunami-travel-times`
 
-Este endpoint calcula los tiempos de arribo de un tsunami a diferentes ubicaciones costeras. Este endpoint requiere los mismos parámetros que el endpoint `/calculate` y devuelve un objeto JSON con los tiempos de arribo y distancias para diferentes puntos definidos en [`puertos.txt`](model/puertos.txt).
+Este endpoint utiliza los mismos parámetros que `/calculate` y calcula los tiempos de llegada del tsunami a las diferentes estaciones definidas en [`puertos.txt`](model/puertos.txt). Devuelve un objeto JSON con los tiempos de arribo y distancias para cada estación.
 
 ### `/run-tsdhn`
 
-Este endpoint ejecuta la simulación del modelo TSDHN y devuelve un objeto JSON con el archivo PDF y el archivo de texto `salida.txt` generados por el modelo. En pruebas locales, este paso puede tomar alrededor de 12 minutos en completarse en un proceso i9.
-
-Este endpoint básicamente llama [model/job.run](model/job.run) y espera a que el modelo termine de ejecutarse. Este script csh genera:
-
-1. Un [reporte.pdf](model/reporte.pdf) que contiene información detallada del evento, incluyendo un mapa de tiempo de arribo del tsunami y mareogramas virtuales para las estaciones definidas en [`puertos.txt`](model/puertos.txt).
-2. Un archivo de texto llamado [`salida.txt`](model/salida.txt) que proporciona datos sobre el epicentro y tiempos de arribo del tsunami a las estaciones.
+Este endpoint ejecuta el script csh [`job.run`](model/job.run) que realiza la simulación del tsunami. La ejecución puede tardar aproximadamente 12 minutos en un procesador i9.
 
 > [!IMPORTANT]
-> El modelo no procesa magnitudes superiores a Mw 9.5 y menores a Mw 6.5. La API devolverá un error si se intenta procesar un terremoto fuera de estos límites.
+> El modelo solo procesa magnitudes entre Mw 6.5 y Mw 9.5. Valores fuera de este rango resultarán en un error.
+
+Salida:
+
+1. Un [reporte.pdf](model/reporte.pdf) que contiene un mapa de tiempos de arribo y mareogramas sintéticos para cada estación en [`puertos.txt`](model/puertos.txt).
+2. Un archivo de texto llamado [`salida.txt`](model/salida.txt) con datos del epicentro y tiempos de arribo.
 
 ## Problemas comunes
 
