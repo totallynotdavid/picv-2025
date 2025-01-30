@@ -14,7 +14,7 @@ dependencies = [
     "uvicorn (>=0.34.0,<0.35.0)",
     "pydantic (>=2.10.6,<3.0.0)",
     "scipy (==1.11.4)",
-    "numpy (==1.26.4)",
+    "numpy (==2.2.2)",
 ]
 
 [build-system]
