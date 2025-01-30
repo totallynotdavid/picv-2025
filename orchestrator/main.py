@@ -5,7 +5,11 @@ from datetime import datetime
 
 from app.core.calculator import TsunamiCalculator
 from app.core.config import LOGGING_CONFIG, MODEL_DIR
-from app.models.schemas import EarthquakeInput
+from app.models.schemas import (
+    CalculationResponse,
+    EarthquakeInput,
+    TsunamiTravelResponse,
+)
 from fastapi import FastAPI, HTTPException
 
 # Configure logging
@@ -18,10 +22,16 @@ app = FastAPI(title="TSDHN API", version="0.1.0")
 calculator = TsunamiCalculator()
 
 
-@app.post("/calculate")
+@app.post("/calculate", response_model=CalculationResponse)
 async def calculate_endpoint(data: EarthquakeInput):
     """
-    Endpoint for initial earthquake calculations
+    Calculate earthquake parameters and assess tsunami risk.
+
+    Required: Mw (magnitude), h (depth), lat0 (latitude), lon0 (longitude)
+    Optional: dia (day), hhmm (time)
+
+    Returns earthquake parameters including rupture dimensions, tsunami warning,
+    and location classification.
     """
     try:
         return calculator.calculate_earthquake_parameters(data)
@@ -30,10 +40,14 @@ async def calculate_endpoint(data: EarthquakeInput):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.post("/tsunami-travel-times")
+@app.post("/tsunami-travel-times", response_model=TsunamiTravelResponse)
 async def tsunami_travel_times_endpoint(data: EarthquakeInput):
     """
-    Endpoint for calculating tsunami travel times
+    Calculate tsunami travel times to coastal locations.
+
+    Uses same input parameters as /calculate.
+    Returns estimated arrival times and distances for monitored ports,
+    along with epicenter information.
     """
     try:
         return calculator.calculate_tsunami_travel_times(data)
@@ -45,7 +59,10 @@ async def tsunami_travel_times_endpoint(data: EarthquakeInput):
 @app.post("/run-tsdhn")
 async def run_tsdhn():
     """
-    Endpoint to execute the job.run file
+    Execute TSDHN model with parameters from hypo.dat.
+
+    Requires prior execution of /calculate endpoint to generate hypo.dat.
+    Returns execution status and model output.
     """
     try:
         job_run_path = MODEL_DIR / "job.run"
@@ -71,7 +88,7 @@ async def run_tsdhn():
 @app.get("/health")
 async def health_check():
     """
-    Health check endpoint
+    Returns service status and current timestamp.
     """
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
