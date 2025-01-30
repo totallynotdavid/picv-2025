@@ -2,15 +2,16 @@ import logging
 from typing import Tuple
 
 import numpy as np
-from core.config import EARTH_RADIUS, GRAVITY, MODEL_DIR
-from models.schemas import (
+from scipy.interpolate import RegularGridInterpolator
+from scipy.io import loadmat
+
+from orchestrator.core.config import EARTH_RADIUS, GRAVITY, MODEL_DIR
+from orchestrator.models.schemas import (
     CalculationResponse,
     EarthquakeInput,
     TsunamiTravelResponse,
 )
-from scipy.interpolate import RegularGridInterpolator
-from scipy.io import loadmat
-from utils.geo import (
+from orchestrator.utils.geo import (
     calculate_distance_to_coast,
     determine_epicenter_location,
     determine_tsunami_warning,

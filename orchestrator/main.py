@@ -3,10 +3,11 @@ import os
 import subprocess
 from datetime import datetime
 
-from core.calculator import TsunamiCalculator
-from core.config import LOGGING_CONFIG, MODEL_DIR
 from fastapi import FastAPI, HTTPException
-from models.schemas import (
+
+from orchestrator.core.calculator import TsunamiCalculator
+from orchestrator.core.config import LOGGING_CONFIG, MODEL_DIR
+from orchestrator.models.schemas import (
     CalculationResponse,
     EarthquakeInput,
     TsunamiTravelResponse,
