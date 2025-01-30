@@ -8,14 +8,14 @@ from models.schemas import (
     EarthquakeInput,
     TsunamiTravelResponse,
 )
+from scipy.interpolate import RegularGridInterpolator
+from scipy.io import loadmat
 from utils.geo import (
     calculate_distance_to_coast,
     determine_epicenter_location,
     determine_tsunami_warning,
     format_arrival_time,
 )
-from scipy.interpolate import RegularGridInterpolator
-from scipy.io import loadmat
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +27,6 @@ class TsunamiCalculator:
         self.g = GRAVITY
         self.R = EARTH_RADIUS
         self._load_data()
-
-        logger.debug("Gravity value: %s", self.g)
-        logger.debug("Earth radius: %s", self.R)
 
     def _load_data(self):
         """Load and preprocess required data files for calculations."""

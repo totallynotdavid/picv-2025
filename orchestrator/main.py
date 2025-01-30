@@ -5,12 +5,12 @@ from datetime import datetime
 
 from core.calculator import TsunamiCalculator
 from core.config import LOGGING_CONFIG, MODEL_DIR
+from fastapi import FastAPI, HTTPException
 from models.schemas import (
     CalculationResponse,
     EarthquakeInput,
     TsunamiTravelResponse,
 )
-from fastapi import FastAPI, HTTPException
 
 # Configure logging
 logging.basicConfig(**LOGGING_CONFIG)
