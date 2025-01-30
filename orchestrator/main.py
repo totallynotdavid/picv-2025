@@ -3,9 +3,9 @@ import os
 import subprocess
 from datetime import datetime
 
-from app.core.calculator import TsunamiCalculator
-from app.core.config import LOGGING_CONFIG, MODEL_DIR
-from app.models.schemas import (
+from core.calculator import TsunamiCalculator
+from core.config import LOGGING_CONFIG, MODEL_DIR
+from models.schemas import (
     CalculationResponse,
     EarthquakeInput,
     TsunamiTravelResponse,

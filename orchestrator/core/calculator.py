@@ -2,13 +2,13 @@ import logging
 from typing import Tuple
 
 import numpy as np
-from app.core.config import EARTH_RADIUS, GRAVITY, MODEL_DIR
-from app.models.schemas import (
+from core.config import EARTH_RADIUS, GRAVITY, MODEL_DIR
+from models.schemas import (
     CalculationResponse,
     EarthquakeInput,
     TsunamiTravelResponse,
 )
-from app.utils.geo import (
+from utils.geo import (
     calculate_distance_to_coast,
     determine_epicenter_location,
     determine_tsunami_warning,
@@ -27,6 +27,9 @@ class TsunamiCalculator:
         self.g = GRAVITY
         self.R = EARTH_RADIUS
         self._load_data()
+
+        logger.debug("Gravity value: %s", self.g)
+        logger.debug("Earth radius: %s", self.R)
 
     def _load_data(self):
         """Load and preprocess required data files for calculations."""
