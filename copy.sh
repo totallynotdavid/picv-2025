@@ -3,7 +3,7 @@
 # User Configuration
 scan_dirs=("orchestrator")
 ignore_dirs=("orchestrator/tests" "__pycache__")
-root_files=()
+root_files=("pyproject.toml")
 allowed_extensions=("py")
 
 # Function to build a find command string with proper escaping for ignoring dirs
