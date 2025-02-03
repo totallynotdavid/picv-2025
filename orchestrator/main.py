@@ -3,6 +3,7 @@ import os
 import subprocess
 from datetime import datetime
 
+import uvicorn
 from fastapi import FastAPI, HTTPException
 
 from orchestrator.core.calculator import TsunamiCalculator
@@ -94,7 +95,9 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
-if __name__ == "__main__":
-    import uvicorn
-
+def start_app():
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+if __name__ == "__main__":
+    start_app()
