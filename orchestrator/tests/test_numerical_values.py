@@ -24,7 +24,7 @@ expected_basic = {
     "dislocation": 10.636224,  # D (m)
     "azimuth": 247.0,  # Focal mechanism strike (deg)
     "dip": 18.0,  # Dip (deg)
-    "distance_to_coast": 10432.438345,  # 10439.472791,  # (km)
+    "distance_to_coast": 10439.472791,  # (km)
 }
 
 expected_rect_params = {
