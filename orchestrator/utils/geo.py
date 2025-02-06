@@ -6,10 +6,22 @@ import numpy as np
 def calculate_distance_to_coast(
     coast_points: np.ndarray, lon0: float, lat0: float
 ) -> float:
+    """
+    Compute the distance from the epicenter (lon0, lat0) to the closest point
+    on the coast. The coast_points array is assumed to have the format:
+    [ [lon, lat], [lon, lat], ... ].
+
+    The distance in degrees is multiplied by a conversion factor (111.12 km/deg)
+    to yield a distance in kilometers.
+    """
+    # Compute Euclidean distance in degree space
     distances = np.sqrt(
         (coast_points[:, 0] - lon0) ** 2 + (coast_points[:, 1] - lat0) ** 2
     )
-    return np.min(distances) * 111.12
+    min_deg = np.min(distances)
+    km = min_deg * 111.195  # magic number to convert degrees to km
+
+    return km
 
 
 def format_arrival_time(time: float, day: str) -> str:
