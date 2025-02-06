@@ -1,5 +1,5 @@
 import logging
-from typing import Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
@@ -84,14 +84,20 @@ class TsunamiCalculator:
         """
         try:
             # Calculate basic earthquake parameters
-            L = 10 ** (0.55 * data.Mw - 2.19)  # length
-            W = 10 ** (0.31 * data.Mw - 0.63)  # width
-            M0 = 10 ** (1.5 * data.Mw + 9.1)  # seismic moment
-            u = 4.5e10  # rigidity
-            D = M0 / (u * (L * 1000) * (W * 1000))  # dislocation
+            L = 10 ** (0.55 * data.Mw - 2.19)  # length (km)
+            W = 10 ** (0.31 * data.Mw - 0.63)  # width (km)
+            M0 = 10 ** (1.5 * data.Mw + 9.1)  # seismic moment (N*m)
+            u = 4.5e10  # rigidity (N/m^2)
+            D = M0 / (u * (L * 1000) * (W * 1000))  # dislocation (m)
 
-            # Get additional parameters
+            # Get additional parameters from focal mechanism
             azimuth, dip = self._get_focal_mechanism(data.lon0, data.lat0)
+
+            # Calculate rectangle parameters (fault plane)
+            rect_params, rect_corners = self._calculate_rectangle_parameters(
+                L, W, data.lon0, data.lat0, azimuth, dip
+            )
+
             distance_to_coast = calculate_distance_to_coast(
                 self.maper1[:, :2], data.lon0, data.lat0
             )
@@ -116,6 +122,8 @@ class TsunamiCalculator:
                 azimuth=azimuth,
                 dip=dip,
                 epicenter_location=location,
+                rectangle_parameters=rect_params,
+                rectangle_corners=rect_corners,
             )
 
         except Exception:
@@ -204,6 +212,9 @@ class TsunamiCalculator:
         """
         try:
             mech_data = np.loadtxt(self.data_path / "mecfoc.dat")
+            mech_data[:, 0] = np.where(
+                mech_data[:, 0] > 0, mech_data[:, 0] - 360, mech_data[:, 0]
+            )
             distances = np.sqrt(
                 (mech_data[:, 0] - lon0) ** 2 + (mech_data[:, 1] - lat0) ** 2
             )
@@ -214,6 +225,90 @@ class TsunamiCalculator:
         except Exception:
             logger.exception("Error getting focal mechanism")
             raise
+
+    def _calculate_rectangle_parameters(
+        self, L: float, W: float, lon0: float, lat0: float, azimuth: float, dip: float
+    ) -> Tuple[Dict[str, float], List[Dict[str, float]]]:
+        """
+        Calculate rectangle (fault plane) parameters and its corner coordinates.
+
+        Args:
+            L: Rupture length in km.
+            W: Rupture width in km.
+            lon0: Epicenter longitude.
+            lat0: Epicenter latitude.
+            azimuth: Fault strike in degrees.
+            dip: Dip angle in degrees (fixed at 18 in MATLAB).
+
+        Returns:
+            A tuple containing:
+            - A dictionary of rectangle parameters:
+              L1, W1, beta, alfa, h1, a1, b1, xo, yo.
+            - A list of dictionaries for the rectangle corners
+              (each with 'lon' and 'lat').
+        """
+        # Convert rupture dimensions from km to meters
+        L1 = L * 1000  # length in m
+        W1 = 1000 * W * np.cos(np.deg2rad(dip))
+        beta = np.arctan(W1 / L1) * 180 / np.pi
+        alfa = azimuth - 270
+        h1 = np.sqrt(L1**2 + W1**2)
+        a1 = 0.5 * h1 * np.sin(np.deg2rad(alfa + beta)) / 1000  # in km
+        b1 = 0.5 * h1 * np.cos(np.deg2rad(alfa + beta)) / 1000  # in km
+        xo = lon0 + b1 / 110
+        yo = lat0 - a1 / 110
+
+        rect_params = {
+            "L1": L1,
+            "W1": W1,
+            "beta": beta,
+            "alfa": alfa,
+            "h1": h1,
+            "a1": a1,
+            "b1": b1,
+            "xo": xo,
+            "yo": yo,
+        }
+
+        # Calculate rectangle corners
+        # Convert azimuth angles to radians for the corner calculations
+        a1_prime = -np.deg2rad(azimuth - 90)
+        a2_prime = -np.deg2rad(azimuth)
+        r1 = L1 / (60 * 1853)
+        r2 = W1 / (60 * 1853)
+
+        # Compute the four corners (plus repeat first point at end)
+        sx = (
+            np.array(
+                [
+                    0,
+                    r1 * np.cos(a1_prime),
+                    r1 * np.cos(a1_prime) + r2 * np.cos(a2_prime),
+                    r2 * np.cos(a2_prime),
+                    0,
+                ]
+            )
+            + xo
+        )
+        sy = (
+            np.array(
+                [
+                    0,
+                    r1 * np.sin(a1_prime),
+                    r1 * np.sin(a1_prime) + r2 * np.sin(a2_prime),
+                    r2 * np.sin(a2_prime),
+                    0,
+                ]
+            )
+            + yo
+        )
+
+        # Prepare corners as list of dicts with 'lon' and 'lat'
+        rectangle_corners = []
+        for lon_corner, lat_corner in zip(sx, sy, strict=False):
+            rectangle_corners.append({"lon": lon_corner, "lat": lat_corner})
+
+        return rect_params, rectangle_corners
 
     def _calculate_travel_time(
         self, lon0: float, lat0: float, port_lon: float, port_lat: float, time0: float
@@ -300,9 +395,9 @@ class TsunamiCalculator:
             v = np.sqrt(self.g * h) * 3.6
 
             # Simpson's rule integration
-            delta = alfa / n * self.R
+            delta_distance = alfa / n * self.R
             y = 1 / v
-            integral = (delta / 3) * (
+            integral = (delta_distance / 3) * (
                 y[0] + y[-1] + 4 * np.sum(y[1:-1:2]) + 2 * np.sum(y[2:-1:2])
             )
 

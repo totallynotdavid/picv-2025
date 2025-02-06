@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, field_validator
 
@@ -34,6 +34,8 @@ class CalculationResponse(BaseModel):
     azimuth: float
     dip: float
     epicenter_location: str
+    rectangle_parameters: Dict[str, float]
+    rectangle_corners: List[Dict[str, float]]
 
 
 class TsunamiTravelResponse(BaseModel):
