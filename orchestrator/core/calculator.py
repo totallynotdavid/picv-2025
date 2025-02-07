@@ -20,6 +20,10 @@ from orchestrator.utils.geo import (
 
 logger = logging.getLogger(__name__)
 
+# Define a constant for converting rupture dimensions to nautical miles
+# This constant is used in rectangle corner calculations
+NM_CONVERSION = 60 * 1853
+
 
 class TsunamiCalculator:
     def __init__(self):
@@ -28,6 +32,7 @@ class TsunamiCalculator:
         self.g = GRAVITY
         self.R = EARTH_RADIUS
         self._load_data()
+        self._load_static_files()
 
     def _load_data(self):
         """Load and preprocess required data files for calculations."""
@@ -56,13 +61,12 @@ class TsunamiCalculator:
                 fill_value=None,
             )
 
-            # Load maper1.mat
+            # Load maper1.mat (used for coastal points)
             maper1_path = self.data_path / "maper1.mat"
             maper1 = loadmat(maper1_path)
             self.maper1 = maper1["A"]
 
             logger.debug("Data loaded successfully")
-
         except FileNotFoundError as e:
             logger.exception(f"Required data file not found: {e}")
             raise
@@ -70,27 +74,49 @@ class TsunamiCalculator:
             logger.exception(f"Error loading data: {e}")
             raise
 
+    def _load_static_files(self):
+        """
+        Preload static files that are reused on every calculation:
+        - Focal mechanism file (mecfoc.dat)
+        - Ports file (puertos.txt)
+        """
+        try:
+            # Load focal mechanism data once
+            mech_path = self.data_path / "mecfoc.dat"
+            self.mechanism_data = np.loadtxt(mech_path)
+
+            # Adjust longitudes if needed
+            self.mechanism_data[:, 0] = np.where(
+                self.mechanism_data[:, 0] > 0,
+                self.mechanism_data[:, 0] - 360,
+                self.mechanism_data[:, 0],
+            )
+
+            # Load ports data once
+            puertos_path = self.data_path / "puertos.txt"
+            with open(puertos_path, "r") as f:
+                self.ports = f.readlines()
+
+            logger.debug("Static files loaded successfully")
+        except Exception as e:
+            logger.exception("Error loading static files: %s", e)
+            raise
+
     def calculate_earthquake_parameters(
         self, data: EarthquakeInput
     ) -> CalculationResponse:
         """
         Calculate earthquake parameters and assess tsunami risk.
-
-        Args:
-            data: EarthquakeInput object containing earthquake data
-
-        Returns:
-            CalculationResponse object with computed parameters
         """
         try:
             # Calculate basic earthquake parameters
-            L = 10 ** (0.55 * data.Mw - 2.19)  # length (km)
-            W = 10 ** (0.31 * data.Mw - 0.63)  # width (km)
+            L = 10 ** (0.55 * data.Mw - 2.19)  # length in km
+            W = 10 ** (0.31 * data.Mw - 0.63)  # width in km
             M0 = 10 ** (1.5 * data.Mw + 9.1)  # seismic moment (N*m)
             u = 4.5e10  # rigidity (N/m^2)
             D = M0 / (u * (L * 1000) * (W * 1000))  # dislocation (m)
 
-            # Get additional parameters from focal mechanism
+            # Get additional parameters from focal mechanism (using preloaded data)
             azimuth, dip = self._get_focal_mechanism(data.lon0, data.lat0)
 
             # Calculate rectangle parameters (fault plane)
@@ -109,7 +135,7 @@ class TsunamiCalculator:
             location = determine_epicenter_location(h0, distance_to_coast)
             warning = determine_tsunami_warning(data.Mw, data.h, h0, distance_to_coast)
 
-            # Write hypo.dat file
+            # Write hypo.dat file (for model execution)
             self._write_hypo_dat(data)
 
             return CalculationResponse(
@@ -135,24 +161,13 @@ class TsunamiCalculator:
     ) -> TsunamiTravelResponse:
         """
         Calculate tsunami travel times to various ports.
-
-        Args:
-            data: EarthquakeInput object containing earthquake data
-
-        Returns:
-            TsunamiTravelResponse object with arrival times and distances
         """
         try:
             arrival_times = {}
             distances = {}
             time0 = float(data.hhmm[:2]) + float(data.hhmm[2:]) / 60
 
-            # Read ports data
-            with open(self.data_path / "puertos.txt", "r") as f:
-                ports = f.readlines()
-
-            # Calculate for each port
-            for port in ports:
+            for port in self.ports:
                 if len(port) < 15:
                     continue
 
@@ -179,7 +194,6 @@ class TsunamiCalculator:
                     logger.error(f"Error processing port data '{port.strip()}': {e}")
                     continue
 
-            # Prepare epicenter information
             epicenter_info = {
                 "date": data.dia,
                 "time": data.hhmm,
@@ -211,17 +225,13 @@ class TsunamiCalculator:
             Tuple of (azimuth, dip)
         """
         try:
-            mech_data = np.loadtxt(self.data_path / "mecfoc.dat")
-            mech_data[:, 0] = np.where(
-                mech_data[:, 0] > 0, mech_data[:, 0] - 360, mech_data[:, 0]
-            )
+            mech_data = self.mechanism_data
             distances = np.sqrt(
                 (mech_data[:, 0] - lon0) ** 2 + (mech_data[:, 1] - lat0) ** 2
             )
             closest_idx = np.argmin(distances)
 
             return mech_data[closest_idx, 2], 18.0
-
         except Exception:
             logger.exception("Error getting focal mechanism")
             raise
@@ -247,10 +257,10 @@ class TsunamiCalculator:
             - A list of dictionaries for the rectangle corners
               (each with 'lon' and 'lat').
         """
-        # Convert rupture dimensions from km to meters
+        # Convert rupture dimensions from km to m
         L1 = L * 1000  # length in m
-        W1 = 1000 * W * np.cos(np.deg2rad(dip))
-        beta = np.arctan(W1 / L1) * 180 / np.pi
+        W1 = W * 1000 * np.cos(np.deg2rad(dip))
+        beta = np.degrees(np.arctan(W1 / L1))
         alfa = azimuth - 270
         h1 = np.sqrt(L1**2 + W1**2)
         a1 = 0.5 * h1 * np.sin(np.deg2rad(alfa + beta)) / 1000  # in km
@@ -270,14 +280,12 @@ class TsunamiCalculator:
             "yo": yo,
         }
 
-        # Calculate rectangle corners
-        # Convert azimuth angles to radians for the corner calculations
-        a1_prime = -np.deg2rad(azimuth - 90)
-        a2_prime = -np.deg2rad(azimuth)
-        r1 = L1 / (60 * 1853)
-        r2 = W1 / (60 * 1853)
+        # Calculate rectangle corners using vectorized operations
+        a1_prime = -np.radians(azimuth - 90)
+        a2_prime = -np.radians(azimuth)
+        r1 = L1 / NM_CONVERSION
+        r2 = W1 / NM_CONVERSION
 
-        # Compute the four corners (plus repeat first point at end)
         sx = (
             np.array(
                 [
@@ -290,6 +298,7 @@ class TsunamiCalculator:
             )
             + xo
         )
+
         sy = (
             np.array(
                 [
@@ -303,11 +312,9 @@ class TsunamiCalculator:
             + yo
         )
 
-        # Prepare corners as list of dicts with 'lon' and 'lat'
-        rectangle_corners = []
-        for lon_corner, lat_corner in zip(sx, sy, strict=False):
-            rectangle_corners.append({"lon": lon_corner, "lat": lat_corner})
-
+        rectangle_corners = [
+            {"lon": lon, "lat": lat} for lon, lat in zip(sx, sy, strict=False)
+        ]
         return rect_params, rectangle_corners
 
     def _calculate_travel_time(
@@ -328,12 +335,12 @@ class TsunamiCalculator:
         """
         try:
             # Convert to radians
-            t1 = np.pi / 2 - lat0 * np.pi / 180
-            f1 = lon0 * np.pi / 180
-            t2 = np.pi / 2 - port_lat * np.pi / 180
-            f2 = port_lon * np.pi / 180
+            t1 = np.pi / 2 - np.radians(lat0)
+            f1 = np.radians(lon0)
+            t2 = np.pi / 2 - np.radians(port_lat)
+            f2 = np.radians(port_lon)
 
-            # Calculate great circle distance
+            # Calculate great circle distance using spherical law of cosines
             cosen = np.sin(t1) * np.sin(t2) * np.cos(f1 - f2) + np.cos(t1) * np.cos(t2)
             alfa = np.arccos(cosen)
             distance = self.R * alfa
@@ -341,7 +348,7 @@ class TsunamiCalculator:
             # Determine travel time based on distance and location
             if distance >= 750:
                 travel_time = distance / 790 + 0.2
-            elif (lat0 > 0 or lat0 < -19) and distance < 750:
+            elif not (-19 <= lat0 <= 0) and distance < 750:
                 travel_time = distance / 700
             else:
                 travel_time = self._calculate_detailed_travel_time(
@@ -378,32 +385,40 @@ class TsunamiCalculator:
             Calculated travel time
         """
         try:
-            # Calculate velocity vector
+            # Compute unit velocity vector
+            # (direction scaled to 110 for geographic conversion)
             vu = np.array([port_lon - lon0, port_lat - lat0]) / distance * 110
             n = 100
-            delta = alfa * 180 / np.pi / n
+            delta = (alfa * 180 / np.pi) / n  # step size in degrees
 
-            # Calculate depths along path
-            P0 = np.array([lon0, lat0])
-            h = [abs(self.bathy_interpolator((lat0, lon0)))]
+            # Vectorize the computation of positions along the path
+            indices = np.arange(0, n + 1).reshape(-1, 1)  # shape (n+1, 1)
+            P0 = np.array([lon0, lat0])  # starting point (lon, lat)
 
-            for i in range(n):
-                P = P0 + (i + 1) * delta * vu
-                h.append(abs(self.bathy_interpolator((P[1], P[0]))))
+            # Each row: P = P0 + (i * delta) * vu
+            positions = P0 + indices * delta * vu  # shape (n+1, 2)
 
-            h = np.array(h)
+            # The interpolator expects (lat, lon), so swap columns:
+            points = positions[:, [1, 0]]
+
+            # Get absolute bathymetry values along the path
+            h = np.abs(self.bathy_interpolator(points))
+
+            # Compute tsunami velocity (converted to km/h)
             v = np.sqrt(self.g * h) * 3.6
 
             # Simpson's rule integration
-            delta_distance = alfa / n * self.R
+            delta_distance = (alfa / n) * self.R
             y = 1 / v
+
+            # Simpson integration: endpoints + weighted sums for even/odd indices
             integral = (delta_distance / 3) * (
                 y[0] + y[-1] + 4 * np.sum(y[1:-1:2]) + 2 * np.sum(y[2:-1:2])
             )
 
             travel_time = 0.50 * integral
 
-            # Adjust travel time based on empirical thresholds
+            # Empirical adjustments to travel time
             if travel_time > 3.0:
                 travel_time = distance / 733 + 0.25
             elif 1.4 < travel_time < 3.0:
@@ -424,12 +439,15 @@ class TsunamiCalculator:
         """
         try:
             with open("hypo.dat", "w") as f:
-                f.write(f"{data.hhmm}\n")
-                f.write(f"{data.lon0:.2f}\n")
-                f.write(f"{data.lat0:.2f}\n")
-                f.write(f"{data.h:.0f}\n")
-                f.write(f"{data.Mw:.1f}\n")
-
+                f.writelines(
+                    [
+                        f"{data.hhmm}\n",
+                        f"{data.lon0:.2f}\n",
+                        f"{data.lat0:.2f}\n",
+                        f"{data.h:.0f}\n",
+                        f"{data.Mw:.1f}\n",
+                    ]
+                )
         except Exception:
             logger.exception("Error writing hypo.dat")
             raise
