@@ -2,6 +2,8 @@ from datetime import datetime
 
 import numpy as np
 
+from orchestrator.utils.deg2km import deg2km
+
 
 def calculate_distance_to_coast(
     coast_points: np.ndarray, lon0: float, lat0: float
@@ -19,7 +21,7 @@ def calculate_distance_to_coast(
         (coast_points[:, 0] - lon0) ** 2 + (coast_points[:, 1] - lat0) ** 2
     )
     min_deg = np.min(distances)
-    km = min_deg * 111.195  # magic number to convert degrees to km
+    km = deg2km(min_deg)
 
     return km
 
