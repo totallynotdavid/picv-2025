@@ -2,7 +2,9 @@ from datetime import datetime
 
 import numpy as np
 
-from orchestrator.utils.deg2km import deg2km
+# Constants
+EARTH_RADIUS = 6371.0  # in kilometers
+DEG_TO_KM = (EARTH_RADIUS * np.pi) / 180.0
 
 
 def calculate_distance_to_coast(
@@ -13,27 +15,21 @@ def calculate_distance_to_coast(
     on the coast. The coast_points array is assumed to have the format:
     [ [lon, lat], [lon, lat], ... ].
 
-    The distance in degrees is multiplied by a conversion factor (111.12 km/deg)
-    to yield a distance in kilometers.
+    The minimal angular distance (in degrees) is converted to kilometers using the
+    Earth's radius.
     """
-    # Compute Euclidean distance in degree space
-    distances = np.sqrt(
-        (coast_points[:, 0] - lon0) ** 2 + (coast_points[:, 1] - lat0) ** 2
-    )
-    min_deg = np.min(distances)
-    km = deg2km(min_deg)
-
-    return km
+    # Compute Euclidean distance in degree space using np.hypot
+    distances = np.hypot(coast_points[:, 0] - lon0, coast_points[:, 1] - lat0)
+    min_deg = distances.min()
+    return min_deg * DEG_TO_KM
 
 
 def format_arrival_time(time: float, day: str) -> str:
     hour = int(time)
     minute = int((time - hour) * 60)
-
     day_increment = hour >= 24
     if day_increment:
         hour -= 24
-
     day = str(int(day) + day_increment).zfill(2)
     return f"{hour:02d}:{minute:02d} {day}{datetime.now().strftime('%b')}"
 
