@@ -42,28 +42,54 @@ flowchart TB
 > [!WARNING]
 > El proyecto está diseñado para ejecutarse en Linux (Ubuntu 20.04). Usuarios de Windows deben utilizar Windows Subsystem for Linux (WSL 2.0+). [Instalación de WSL](https://learn.microsoft.com/es-es/windows/wsl/install)
 
-**Prerrequisitos:** 
-- Python 3.10 (gestión de dependencias con Poetry)
-- MATLAB R2014 
-- Compiladores: gfortran 9.4.0
-- Mínimo 8 GB de RAM y 4 núcleos de CPU
+**Prerrequisitos:**
 
-**Pasos de instalación:** 
+1. Python 3.10.0
+   ```bash
+   sudo apt update -y && sudo apt upgrade -y
+   python3 --version
+   sudo apt install -y python3-pip
+   ```
+2. Poetry 2.0.1 (utilizamos Poetry para manejar las dependencias del proyecto)
+
+   ```bash
+   curl -sSL https://install.python-poetry.org | python3 -
+   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+   source ~/.bashrc
+   poetry --version
+   ```
+
+3. [MATLAB R2014](https://drive.google.com/file/d/1VhLnwXX78Y7O8huwlRuE-shOW2LKlVpd/view?usp=drive_link) (solo necesario si piensas ejecutar la interfaz gráfica original)
+
+4. gfortran 11.4.0
+   ```bash
+   sudo apt install -y gfortran
+   gfortran --version  # Verificar instalación
+   ```
+
+En cuanto al hardware, se recomienda tener al menos 8 GB de RAM, un CPU con 4 núcleos físicos y 5 GB de espacio libre en disco.
+
+**Pasos de instalación:**
 
 1. Clonar el repositorio:
-  ```bash
-  git clone https://github.com/totallynotdavid/picv-2025
-  cd picv-2025
-  ```
+
+```bash
+git clone https://github.com/totallynotdavid/picv-2025
+cd picv-2025
+```
+
 2. Instalar dependencias con Poetry:
-  ```bash
-  poetry install
-  eval $(poetry env activate)
-  ```
+
+```bash
+poetry install
+eval $(poetry env activate)
+```
+
 3. Verificar la instalación ejecutando:
-  ```bash
-  poetry run pytest
-  ```
+
+```bash
+poetry run pytest
+```
 
 ## Estructura del proyecto
 
@@ -128,8 +154,9 @@ Respuesta esperada:
 
 2. [`/tsunami-travel-times`](orchestrator/main.py?plain=1#L43) utiliza los mismos datos de entrada y realiza una serie de integraciones vectorizadas para calcular los tiempos de arribo a puertos predefinidos ([`puertos.txt`](/model/puertos.txt)). La respuesta es un objeto JSON que incluye tanto los tiempos de arribo como las distancias a cada estación.
 3. [`/run-tsdhn`](orchestrator/main.py?plain=1#L59) llama al script job.run, que procesa hypo.dat y genera resultados en ~12 minutos (i9). Produce:
-  - [`salida.txt`](model/salida.txt): Tiempos de arribo brutos.
-  - [`reporte.pdf`](model/reporte.pdf): Mapas de altura de olas, mareógrafos y parámetros técnicos.
+
+- [`salida.txt`](model/salida.txt): Tiempos de arribo brutos.
+- [`reporte.pdf`](model/reporte.pdf): Mapas de altura de olas, mareógrafos y parámetros técnicos.
 
 > [!WARNING]
 > Los endpoints deben invocarse en orden estricto: `/calculate` -> `/tsunami-travel-times` -> `/run-tsdhn`, ya que cada uno depende del resultado del anterior.
@@ -138,14 +165,14 @@ Respuesta esperada:
 
 El modelo TSDHN requiere los siguientes parámetros para la simulación. Estos datos son proporcionados por el usuario a través de las solicitudes a la API:
 
-| Parámetro | Descripción                  | Unidad       |  
-|----------|------------------------------|--------------|  
-| `Mw`     | Magnitud momento sísmico     | Adimensional |  
-| `h`      | Profundidad del hipocentro   | km           |  
-| `lat0`   | Latitud del epicentro        | grados       |  
-| `lon0`   | Longitud del epicentro       | grados       |  
-| `dia`    | Día del mes del evento       |              |
-| `hhmm`   | Hora y minutos del evento    |              |
+| Parámetro | Descripción                | Unidad       |
+| --------- | -------------------------- | ------------ |
+| `Mw`      | Magnitud momento sísmico   | Adimensional |
+| `h`       | Profundidad del hipocentro | km           |
+| `lat0`    | Latitud del epicentro      | grados       |
+| `lon0`    | Longitud del epicentro     | grados       |
+| `dia`     | Día del mes del evento     |              |
+| `hhmm`    | Hora y minutos del evento  |              |
 
 Ten en cuenta que los modelos Pydantic (definidos en schemas.py) se encargan de validar y, en algunos casos, transformar estos parámetros para asegurar que el formato sea el correcto.
 
