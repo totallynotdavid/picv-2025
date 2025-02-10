@@ -1,13 +1,16 @@
-# TSDHN API
+# Documentación del Orchestrator TSDHN
 
-El modelo TSDHN permite la estimación de parámetros de tsunamis de origen lejano mediante simulaciones numéricas. Este repositorio contiene la API TSDHN, una interfaz desarrollada con FastAPI que facilita la comunicación entre [picv-2025-web](https://github.com/totallynotdavid/picv-2025-web) y el [modelo TSDHN](https://github.com/totallynotdavid/picv-2025/tree/main/model).
+El modelo TSDHN es una herramienta para la estimación de parámetros de tsunamis de origen lejano mediante simulaciones numéricas. Combina un **modelo escrito en Fortran** (ubicado en la carpeta [`/model`](/model/)) con una **API escrita en Python** ([`/orchestrator`](/orchestrator/)) que procesa datos sísmicos iniciales —como ubicación y magnitud de terremotos— para calcular variables como: dimensiones de ruptura sísmica, momento sísmico y desplazamiento de la corteza. Estos resultados alimentan la simulación principal, cuyo resultado incluye un informe PDF con mapas de propagación, gráficos de mareógrafos y datos técnicos, además de un archivo de texto con tiempos de arribo a estaciones costeras.
 
-El siguiente diagrama describe el flujo de trabajo de la API TSDHN:
+> [!IMPORTANT]
+> La lógica de cálculo reside en este repositorio, mientras la [interfaz web](https://github.com/totallynotdavid/picv-2025-web) (que gestiona solicitudes y entrega informes) opera en un entorno separado.
+
+A continuación, se muestra un diagrama que ilustra el flujo general de la API:
 
 ```mermaid
 flowchart TB
     subgraph "TSDHN API v0.1.0"
-        subgraph Endpoints["API Endpoints"]
+        subgraph Endpoints["Endpoints de la API"]
             Calculate["/calculate
             Cálculo de parámetros sísmicos"]
             TravelTimes["/tsunami-travel-times
@@ -37,48 +40,61 @@ flowchart TB
 ## Instalación
 
 > [!WARNING]
-> Esta API funciona solo en sistemas operativos Linux debido a su dependencia de scripts C shell. No es compatible con Windows de forma nativa. Se recomienda usar Windows Subsystem for Linux (WSL) para usuarios de Windows. [Instalación de WSL](https://learn.microsoft.com/es-es/windows/wsl/install)
+> El proyecto está diseñado para ejecutarse en Linux (Ubuntu 20.04). Usuarios de Windows deben utilizar Windows Subsystem for Linux (WSL 2.0+). [Instalación de WSL](https://learn.microsoft.com/es-es/windows/wsl/install)
 
-**Pre-requisitos:** Ubuntu 20.04, Python 3.10, MATLAB R2014, gfortran, csh, poetry.
+**Prerrequisitos:** 
+- Python 3.10 (gestión de dependencias con Poetry)
+- MATLAB R2014 
+- Compiladores: gfortran 9.4.0
+- Mínimo 8 GB de RAM y 4 núcleos de CPU
 
-Para instalar la API TSDHN:
+**Pasos de instalación:** 
 
-```bash
-git clone https://github.com/totallynotdavid/picv-2025
-cd picv-2025
-poetry install
-eval $(poetry env activate)
+1. Clonar el repositorio:
+  ```bash
+  git clone https://github.com/totallynotdavid/picv-2025
+  cd picv-2025
+  ```
+2. Instalar dependencias con Poetry:
+  ```bash
+  poetry install
+  eval $(poetry env activate)
+  ```
+3. Verificar la instalación ejecutando:
+  ```bash
+  poetry run pytest
+  ```
+
+## Estructura del proyecto
+
+El repositorio se organiza en dos componentes principales:
+
+```txt
+picv-2025/
+├── orchestrator/
+│   ├── core/
+│   │   ├── calculator.py         # Contiene la clase TsunamiCalculator y la lógica central de los cálculos.
+│   │   └── config.py             # Define constantes globales y la configuración del logging.
+│   ├── main.py                   # Punto de entrada de la API con FastAPI y definición de los endpoints.
+│   ├── models/
+│   │   └── schemas.py            # Modelos Pydantic para la validación y transformación de los datos.
+│   └── utils/
+│       └── geo.py                # Funciones auxiliares para cálculos geográficos (distancias, formatos, etc.).
+└── model/
+    ├── pacifico.mat              # Datos de batimetría del océano Pacífico.
+    ├── maper1.mat                # Datos de puntos costeros.
+    ├── mecfoc.dat                # Base de datos de mecanismos focales históricos.
+    ├── puertos.txt               # Lista de puertos utilizados en el cálculo de tiempos de arribo.
+    ├── job.run                   # Script C Shell para ejecutar la simulación.
+    ├── reporte.pdf               # Reporte generado con el mapa de tiempos y mareogramas.
+    └── salida.txt                # Archivo de salida con datos del epicentro y tiempos de arribo.
 ```
 
-**Consejo**: Verifica la instalación ejecutando las pruebas: `poetry run pytest`.
+## Flujo de procesamiento
 
-## Parámetros de entrada
+El proceso inicia cuando el usuario envía datos sísmicos desde la interfaz web. La API gestiona los siguientes endpoints:
 
-El modelo requiere los siguientes **parámetros de entrada** para la simulación:
-
-| Parámetro           | Descripción                         | Unidad            |
-| ------------------- | ----------------------------------- | ----------------- |
-| Hora de origen      | Momento exacto del terremoto        | Timestamp         |
-| Longitud            | Coordenada geográfica del epicentro | Grados            |
-| Latitud             | Coordenada geográfica del epicentro | Grados            |
-| Profundidad focal   | Profundidad del hipocentro          | Kilómetros        |
-| Magnitud de momento | Escala de intensidad sísmica        | Mw (adimensional) |
-
-## Endpoints
-
-La API expone los siguientes endpoints:
-
-1. [`/calculate`](orchestrator/main.py?plain=1#L25): Calcula los parámetros sísmicos del terremoto.
-2. [`/tsunami-travel-times`](orchestrator/main.py?plain=1#L43): Calcula los tiempos de arribo del tsunami a las costas peruanas, basándose en el archivo [`puertos.txt`](model/puertos.txt).
-3. [`/run-tsdhn`](orchestrator/main.py?plain=1#L59): Ejecuta la simulación numérica del modelo TSDHN.
-4. [`/health`](orchestrator/main.py?plain=1#L88): Endpoint para verificar el estado de la API.
-
-> [!WARNING]
-> Los primeros tres endpoints deben ejecutarse en ese orden ya que cada uno depende del anterior.
-
-### `/calculate`
-
-Este endpoint recibe los parámetros del terremoto y calcula parámetros sísmicos adicionales.
+1. [`/calculate`](orchestrator/main.py?plain=1#L25) recibe magnitud (Mw), profundidad (h) y coordenadas del epicentro. Calcula geometría de la ruptura, momento sísmico y evalúa riesgo de tsunami. Genera el archivo hypo.dat que se usará en la simulación.
 
 Ejemplo de solicitud (POST):
 
@@ -94,7 +110,7 @@ POST /calculate
 }
 ```
 
-La respuesta incluirá parámetros como la longitud y ancho de ruptura, desplazamiento, momento sísmico y una evaluación del riesgo de tsunami:
+Respuesta esperada:
 
 ```json
 {
@@ -110,23 +126,35 @@ La respuesta incluirá parámetros como la longitud y ancho de ruptura, desplaza
 }
 ```
 
-### `/tsunami-travel-times`
+2. [`/tsunami-travel-times`](orchestrator/main.py?plain=1#L43) utiliza los mismos datos de entrada y realiza una serie de integraciones vectorizadas para calcular los tiempos de arribo a puertos predefinidos ([`puertos.txt`](/model/puertos.txt)). La respuesta es un objeto JSON que incluye tanto los tiempos de arribo como las distancias a cada estación.
+3. [`/run-tsdhn`](orchestrator/main.py?plain=1#L59) llama al script job.run, que procesa hypo.dat y genera resultados en ~12 minutos (i9). Produce:
+  - [`salida.txt`](model/salida.txt): Tiempos de arribo brutos.
+  - [`reporte.pdf`](model/reporte.pdf): Mapas de altura de olas, mareógrafos y parámetros técnicos.
 
-Este endpoint utiliza los mismos parámetros que `/calculate` y calcula los tiempos de llegada del tsunami a las diferentes estaciones definidas en [`puertos.txt`](model/puertos.txt). Devuelve un objeto JSON con los tiempos de arribo y distancias para cada estación.
+> [!WARNING]
+> Los endpoints deben invocarse en orden estricto: `/calculate` -> `/tsunami-travel-times` -> `/run-tsdhn`, ya que cada uno depende del resultado del anterior.
 
-### `/run-tsdhn`
+## Parámetros de entrada
 
-Este endpoint ejecuta el script csh [`job.run`](model/job.run) que realiza la simulación del tsunami. La ejecución puede tardar aproximadamente 12 minutos en un procesador i9.
+El modelo TSDHN requiere los siguientes parámetros para la simulación. Estos datos son proporcionados por el usuario a través de las solicitudes a la API:
 
-> [!IMPORTANT]
-> El modelo solo procesa magnitudes entre Mw 6.5 y Mw 9.5. Valores fuera de este rango resultarán en un error.
+| Parámetro | Descripción                  | Unidad       |  
+|----------|------------------------------|--------------|  
+| `Mw`     | Magnitud momento sísmico     | Adimensional |  
+| `h`      | Profundidad del hipocentro   | km           |  
+| `lat0`   | Latitud del epicentro        | grados       |  
+| `lon0`   | Longitud del epicentro       | grados       |  
+| `dia`    | Día del mes del evento       |              |
+| `hhmm`   | Hora y minutos del evento    |              |
 
-Salida:
+Ten en cuenta que los modelos Pydantic (definidos en schemas.py) se encargan de validar y, en algunos casos, transformar estos parámetros para asegurar que el formato sea el correcto.
 
-1. Un [reporte.pdf](model/reporte.pdf) que contiene un mapa de tiempos de arribo y mareogramas sintéticos para cada estación en [`puertos.txt`](model/puertos.txt).
-2. Un archivo de texto llamado [`salida.txt`](model/salida.txt) con datos del epicentro y tiempos de arribo.
+## Notas adicionales
 
-## Problemas comunes
-
-1. Si `job.run` no se ejecuta correctamente, verifica que el archivo tenga permisos de ejecución con `chmod +x model/job.run`.
-2. Comprueba que el archivo `hypo.dat` se haya generado correctamente en el directorio `model/` antes de usar el endpoint `/run-tsdhn`. Si no existe, ejecuta los endpoints `/calculate` y `/tsunami-travel-times` antes de ejecutar `/run-tsdhn`.
+- Toda la información relevante y los posibles errores se registran en el archivo `tsunami_api.log` (configurado en [`config.py`](/orchestrator/core/config.py)), lo que te ayudará a depurar cualquier problema. Este archivo se crea automáticamente luego de la primera vez que ejecutas la API.
+- Cada vez que realices cambios en el código, es buena práctica ejecutar:
+  ```bash
+  poetry run pytest
+  poetry poe format
+  ```
+  para formatear el código y asegurarte de todo sigue funcionando correctamente.
