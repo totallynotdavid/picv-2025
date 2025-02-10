@@ -50,7 +50,7 @@ flowchart TB
    python3 --version
    sudo apt install -y python3-pip
    ```
-2. Poetry 2.0.1 (utilizamos Poetry para manejar las dependencias del proyecto)
+2. Poetry 2.0.1 (utilizamos Poetry para manejar nuestras dependencias)
 
    ```bash
    curl -sSL https://install.python-poetry.org | python3 -
@@ -64,7 +64,7 @@ flowchart TB
 4. gfortran 11.4.0
    ```bash
    sudo apt install -y gfortran
-   gfortran --version  # Verificar instalación
+   gfortran --version
    ```
 
 En cuanto al hardware, se recomienda tener al menos 8 GB de RAM, un CPU con 4 núcleos físicos y 5 GB de espacio libre en disco.
