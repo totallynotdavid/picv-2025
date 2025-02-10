@@ -125,7 +125,6 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la interfaz web
 Ejemplo de solicitud (POST):
 
 ```json
-POST /calculate
 {
     "Mw": 7.5,
     "h": 10.0,
