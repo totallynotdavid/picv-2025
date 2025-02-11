@@ -181,11 +181,11 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
 
 - La API guarda automáticamente algunos eventos en `tsunami_api.log`. Puedes configurar el logger en [`config.py`](/orchestrator/core/config.py) si deseas. El archivo de logs se crea cuando inicias la API.
 - Si estás haciendo pruebas y quieres ver los logs en tu terminal mientras usas `pytest`, solo necesitas cambiar una línea en [`pyproject.toml`](pyproject.toml):
-    ```toml
-    [tool.pytest.ini_options]
-    log_cli = true
-    ```
-    Te recomiendo siempre `logger.debug()` en vez de `print()` o sino pytest lo ignorará.
+  ```toml
+  [tool.pytest.ini_options]
+  log_cli = true
+  ```
+  Te recomiendo siempre `logger.debug()` en vez de `print()` o sino pytest lo ignorará.
 - Cuando termines de hacer cambios en el código y antes de hacer commit, ejecuta:
   ```bash
   poetry run pytest
