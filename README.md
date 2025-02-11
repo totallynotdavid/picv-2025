@@ -102,7 +102,7 @@ picv-2025/
 │   ├── core/
 │   │   ├── calculator.py         # Class TsunamiCalculator y la lógica central de los cálculos.
 │   │   └── config.py             # Define constantes globales y la configuración del logging.
-│   ├── main.py                   # Punto de entrada de la API con FastAPI y definición de los endpoints.
+│   ├── main.py                   # Punto de entrada de la API y definición de los endpoints.
 │   ├── models/
 │   │   └── schemas.py            # Schema para la validación y transformación de los datos.
 │   └── utils/
@@ -124,7 +124,7 @@ picv-2025/
 
 El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz web](https://github.com/totallynotdavid/picv-2025-web). La API gestiona los siguientes endpoints:
 
-1. [`/calculate`](orchestrator/main.py?plain=1#L25) recibe los valores para la magnitud (Mw), profundidad (h) y coordenadas del epicentro. Luego, calcula la geometría de la ruptura, el momento sísmico y evalúa el riesgo de tsunami. Genera el archivo hypo.dat que se usará en la simulación.
+1. [`/calculate`](orchestrator/main.py?plain=1#L25) recibe los valores para la magnitud (Mw), profundidad (h) y coordenadas del epicentro. Luego, calcula la geometría de la ruptura, el momento sísmico y evalúa el riesgo de tsunami. Genera el archivo [hypo.dat](model/hypo.dat) que se usará en la simulación.
 
    Los siguientes campos deben enviarse en el cuerpo de la solicitud en formato JSON:
 
