@@ -119,6 +119,9 @@ picv-2025/
 
 ## Flujo de procesamiento
 
+> [!WARNING]
+> El modelo solo procesa magnitudes entre Mw 6.5 y Mw 9.5. Valores fuera de este rango resultarán en un error.
+
 El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz web](https://github.com/totallynotdavid/picv-2025-web). La API gestiona los siguientes endpoints:
 
 1. [`/calculate`](orchestrator/main.py?plain=1#L25) recibe los valores para la magnitud (Mw), profundidad (h) y coordenadas del epicentro. Luego, calcula la geometría de la ruptura, el momento sísmico y evalúa el riesgo de tsunami. Genera el archivo hypo.dat que se usará en la simulación.
@@ -134,12 +137,9 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
    | `dia`     | Día del mes del evento     | string         |
    | `hhmm`    | Hora y minutos del evento  | formato `HHMM` |
 
-   > [!WARNING]
-   > El modelo solo procesa magnitudes entre Mw 6.5 y Mw 9.5. Valores fuera de este rango resultarán en un error.
-
    Ten en cuenta que los modelos Pydantic (definidos en [schemas.py](orchestrator/models/schemas.py)) se encargan de validar y, en algunos casos, transformar estos parámetros para asegurar que el formato sea el correcto.
 
-   Un ejemplo de solicitud (POST):
+   Un ejemplo de solicitud (`POST`):
 
    ```json
    {
@@ -169,7 +169,7 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
    ```
 
 2. [`/tsunami-travel-times`](orchestrator/main.py?plain=1#L43) utiliza los mismos datos de entrada y realiza una serie de integraciones vectorizadas para calcular los tiempos de arribo a puertos predefinidos ([`puertos.txt`](/model/puertos.txt)). La respuesta es un objeto JSON que incluye tanto los tiempos de arribo como las distancias a cada estación.
-3. [`/run-tsdhn`](orchestrator/main.py?plain=1#L59) llama al script job.run, que procesa hypo.dat y genera resultados en ~12 minutos (en un procesador de 8 núcleos). Produce:
+3. [`/run-tsdhn`](orchestrator/main.py?plain=1#L59) llama al script [job.run](model/job.run), que procesa [hypo.dat](model/hypo.dat) y genera resultados en ~12 minutos (en un procesador de 8 núcleos). Produce:
 
    - [`salida.txt`](model/salida.txt): Tiempos de arribo brutos.
    - [`reporte.pdf`](model/reporte.pdf): Mapas de altura de olas, mareógrafos y parámetros técnicos.
@@ -179,10 +179,16 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
 
 ## Notas adicionales
 
-- Toda la información relevante y los posibles errores se registran en el archivo `tsunami_api.log` (configurado en [`config.py`](/orchestrator/core/config.py)), lo que te ayudará a depurar cualquier problema. Este archivo se crea automáticamente luego de la primera vez que ejecutas la API.
-- Cada vez que realices cambios en el código, es buena práctica ejecutar:
+- La API guarda automáticamente algunos eventos en `tsunami_api.log`. Puedes configurar el logger en [`config.py`](/orchestrator/core/config.py) si deseas. El archivo de logs se crea cuando inicias la API.
+- Si estás haciendo pruebas y quieres ver los logs en tu terminal mientras usas `pytest`, solo necesitas cambiar una línea en [`pyproject.toml`](pyproject.toml):
+    ```toml
+    [tool.pytest.ini_options]
+    log_cli = true
+    ```
+    Te recomiendo siempre `logger.debug()` en vez de `print()` o sino pytest lo ignorará.
+- Cuando termines de hacer cambios en el código y antes de hacer commit, ejecuta:
   ```bash
   poetry run pytest
   poetry poe format
   ```
-  para formatear el código y asegurarte de todo sigue funcionando correctamente.
+  para formatear el código y asegurarte de todo sigue funcionando correctamente. En caso de que [poe](https://poethepoet.natn.io/poetry_plugin.html) no sea reconocido, ejecuta en tu terminal `poetry self add 'poethepoet[poetry_plugin]'`.
