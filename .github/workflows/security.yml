@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - uses: tonybaloney/pycharm-security@1.25.1
+      - uses: tonybaloney/pycharm-security@5c1ceeb1fb2a18478fa7076a81f9f47fd450e592
         with:
           path: orchestrator/
           fail_on_warnings: "no"
