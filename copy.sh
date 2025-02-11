@@ -39,7 +39,7 @@ find_files() {
     
     # Combine root files and directory search
     {
-        # First, find root files
+        # First, find root files (if any)
         for file in "${root_files[@]}"; do
             find . -maxdepth 1 -name "$file"
         done
@@ -51,24 +51,57 @@ find_files() {
     } | sort
 }
 
+# Function to strip docstrings from a Python file
+strip_docstrings() {
+    # The inline Python script uses the tokenize module to skip
+    # over any docstring tokens (i.e. a STRING token immediately
+    # following an INDENT). We pass the filename as the first argument.
+    python3 - "$1" <<'EOF'
+import sys, token, tokenize
+fname = sys.argv[1]
+with open(fname, "r") as source:
+    result = []
+    # Initialize prev_toktype so that a module-level docstring is detected.
+    prev_toktype = token.INDENT
+    last_lineno = -1
+    last_col = 0
+    tokgen = tokenize.generate_tokens(source.readline)
+    for toktype, ttext, (slineno, scol), (elineno, ecol), ltext in tokgen:
+        # Adjust spacing if needed
+        if slineno > last_lineno:
+            last_col = 0
+        if scol > last_col:
+            result.append(" " * (scol - last_col))
+        # If a docstring is detected, skip it (don’t add anything)
+        if toktype == token.STRING and prev_toktype == token.INDENT:
+            pass
+        else:
+            result.append(ttext)
+        prev_toktype = toktype
+        last_col = ecol
+        last_lineno = elineno
+    sys.stdout.write("".join(result))
+EOF
+}
+
 # Generate output
 output="=== File Structure ===\n"
 
-# Add file structure
+# Add file structure list
 while IFS= read -r file; do
     output+="${file#./}\n"
 done < <(find_files)
 
 output+="\n=== File Contents ===\n"
 
-# Add file contents
+# Add file contents with docstrings stripped
 while IFS= read -r file; do
     output+="\n// FILE: ${file#./}\n"
-    output+="$(cat "$file")\n"
+    output+="$(strip_docstrings "$file")\n"
     output+="---\n"
 done < <(find_files)
 
-# Remove last separator
+# Remove the last separator
 output="${output%---*}"
 
 # Copy to clipboard
