@@ -5,6 +5,11 @@ on:
     branches:
       - main
 
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
 jobs:
   security_checks:
     runs-on: ubuntu-latest
@@ -13,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - uses: tonybaloney/pycharm-security@master
+      - uses: tonybaloney/pycharm-security@1.25.1
         with:
           path: orchestrator/
           fail_on_warnings: "no"
