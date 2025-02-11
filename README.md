@@ -59,11 +59,18 @@ flowchart TB
    poetry --version
    ```
 
-3. Dependencias adicionales: `gfortran 11.4.0`, `csh`
+3. Dependencias adicionales: `gfortran 11.4.0`, `redis-server`
 
    ```bash
-   sudo apt install -y gfortran csh
+   sudo apt install -y gfortran redis-server
    gfortran --version
+   ```
+
+   Configura Redis para que sea gestionado por systemd (en Ubuntu):
+
+   ```bash
+   sudo sed -i 's/supervised no/supervised systemd/' /etc/redis/redis.conf
+   sudo systemctl restart redis-server
    ```
 
 4. Opcional: [MATLAB R2014](https://drive.google.com/file/d/1VhLnwXX78Y7O8huwlRuE-shOW2LKlVpd/view?usp=drive_link) (si piensas ejecutar la interfaz gráfica original: [<kbd>tsunami.m</kbd>](model/tsunami.m))
