@@ -40,7 +40,7 @@ flowchart TB
 ## Instalación
 
 > [!WARNING]
-> El proyecto ha sido desarrollado para ejecutarse en entornos Linux (recomendamos utilizar **Ubuntu 20.04**). Para usuarios de Windows, es necesario configurar **Windows Subsystem for Linux (WSL versión 2.0 o superior)**. Puedes seguir la guía oficial de Microsoft para instalar WSL: [<kbd>Instalación de WSL</kbd>](https://learn.microsoft.com/es-es/windows/wsl/install).  
+> El proyecto ha sido desarrollado para ejecutarse en entornos Linux (recomendamos utilizar **Ubuntu 20.04**). Para usuarios de Windows, es necesario configurar **Windows Subsystem for Linux (WSL versión 2.0 o superior)**. Puedes seguir la guía oficial de Microsoft para instalar WSL: [<kbd>Instalación de WSL</kbd>](https://learn.microsoft.com/es-es/windows/wsl/install).
 
 **Prerrequisitos:**
 
@@ -60,6 +60,7 @@ flowchart TB
    ```
 
 3. Dependencias adicionales: `gfortran 11.4.0`, `csh`
+
    ```bash
    sudo apt install -y gfortran csh
    gfortran --version
@@ -73,23 +74,23 @@ En cuanto al hardware, se recomienda tener al menos 8 GB de RAM, un CPU con 4 n�
 
 1. Clonar el repositorio:
 
-    ```bash
-    git clone https://github.com/totallynotdavid/picv-2025
-    cd picv-2025
-    ```
+   ```bash
+   git clone https://github.com/totallynotdavid/picv-2025
+   cd picv-2025
+   ```
 
 2. Instalar dependencias con Poetry:
 
-    ```bash
-    poetry install
-    eval $(poetry env activate)
-    ```
+   ```bash
+   poetry install
+   eval $(poetry env activate)
+   ```
 
 3. Verificar la instalación ejecutando:
 
-    ```bash
-    poetry run pytest
-    ```
+   ```bash
+   poetry run pytest
+   ```
 
 ## Estructura del proyecto
 
@@ -120,55 +121,55 @@ picv-2025/
 
 El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz web](https://github.com/totallynotdavid/picv-2025-web). La API gestiona los siguientes endpoints:
 
-1. [`/calculate`](orchestrator/main.py?plain=1#L25) recibe los valores para la magnitud (Mw), profundidad (h) y coordenadas del epicentro. Luego, calcula la geometría de la ruptura, el momento sísmico y evalúa el riesgo de tsunami. Genera el archivo hypo.dat que se usará en la simulación. 
+1. [`/calculate`](orchestrator/main.py?plain=1#L25) recibe los valores para la magnitud (Mw), profundidad (h) y coordenadas del epicentro. Luego, calcula la geometría de la ruptura, el momento sísmico y evalúa el riesgo de tsunami. Genera el archivo hypo.dat que se usará en la simulación.
 
-    Los siguientes campos deben enviarse en el cuerpo de la solicitud en formato JSON:
+   Los siguientes campos deben enviarse en el cuerpo de la solicitud en formato JSON:
 
-    | Parámetro | Descripción                | Unidad       |
-    | --------- | -------------------------- | ------------ |
-    | `Mw`      | Magnitud momento sísmico   | Adimensional |
-    | `h`       | Profundidad del hipocentro | km           |
-    | `lat0`    | Latitud del epicentro      | grados       |
-    | `lon0`    | Longitud del epicentro     | grados       |
-    | `dia`     | Día del mes del evento     | string       |
-    | `hhmm`    | Hora y minutos del evento  | formato `HHMM`|
+   | Parámetro | Descripción                | Unidad         |
+   | --------- | -------------------------- | -------------- |
+   | `Mw`      | Magnitud momento sísmico   | Adimensional   |
+   | `h`       | Profundidad del hipocentro | km             |
+   | `lat0`    | Latitud del epicentro      | grados         |
+   | `lon0`    | Longitud del epicentro     | grados         |
+   | `dia`     | Día del mes del evento     | string         |
+   | `hhmm`    | Hora y minutos del evento  | formato `HHMM` |
 
-    Ten en cuenta que los modelos Pydantic (definidos en [schemas.py](orchestrator/models/schemas.py)) se encargan de validar y, en algunos casos, transformar estos parámetros para asegurar que el formato sea el correcto.
-   
-    Un ejemplo de solicitud (POST):
-    
-    ```json
-    {
-        "Mw": 7.5,
-        "h": 10.0,
-        "lat0": -20.5,
-        "lon0": -70.5,
-        "dia": "15",
-        "hhmm": "1430"
-    }
-    ```
+   Ten en cuenta que los modelos Pydantic (definidos en [schemas.py](orchestrator/models/schemas.py)) se encargan de validar y, en algunos casos, transformar estos parámetros para asegurar que el formato sea el correcto.
 
-    Respuesta esperada:
-    
-    ```json
-    {
-      "length": 120.5,
-      "width": 80.3,
-      "dislocation": 2.5,
-      "seismic_moment": 3.2e20,
-      "tsunami_warning": "Alerta de tsunami para costas cercanas",
-      "distance_to_coast": 45.2,
-      "azimuth": 18.5,
-      "dip": 30.0,
-      "epicenter_location": "mar"
-    }
-    ```
+   Un ejemplo de solicitud (POST):
 
-3. [`/tsunami-travel-times`](orchestrator/main.py?plain=1#L43) utiliza los mismos datos de entrada y realiza una serie de integraciones vectorizadas para calcular los tiempos de arribo a puertos predefinidos ([`puertos.txt`](/model/puertos.txt)). La respuesta es un objeto JSON que incluye tanto los tiempos de arribo como las distancias a cada estación.
-4. [`/run-tsdhn`](orchestrator/main.py?plain=1#L59) llama al script job.run, que procesa hypo.dat y genera resultados en ~12 minutos (en un procesador de 8 núcleos). Produce:
+   ```json
+   {
+     "Mw": 7.5,
+     "h": 10.0,
+     "lat0": -20.5,
+     "lon0": -70.5,
+     "dia": "15",
+     "hhmm": "1430"
+   }
+   ```
 
-    - [`salida.txt`](model/salida.txt): Tiempos de arribo brutos.
-    - [`reporte.pdf`](model/reporte.pdf): Mapas de altura de olas, mareógrafos y parámetros técnicos.
+   Respuesta esperada:
+
+   ```json
+   {
+     "length": 120.5,
+     "width": 80.3,
+     "dislocation": 2.5,
+     "seismic_moment": 3.2e20,
+     "tsunami_warning": "Alerta de tsunami para costas cercanas",
+     "distance_to_coast": 45.2,
+     "azimuth": 18.5,
+     "dip": 30.0,
+     "epicenter_location": "mar"
+   }
+   ```
+
+2. [`/tsunami-travel-times`](orchestrator/main.py?plain=1#L43) utiliza los mismos datos de entrada y realiza una serie de integraciones vectorizadas para calcular los tiempos de arribo a puertos predefinidos ([`puertos.txt`](/model/puertos.txt)). La respuesta es un objeto JSON que incluye tanto los tiempos de arribo como las distancias a cada estación.
+3. [`/run-tsdhn`](orchestrator/main.py?plain=1#L59) llama al script job.run, que procesa hypo.dat y genera resultados en ~12 minutos (en un procesador de 8 núcleos). Produce:
+
+   - [`salida.txt`](model/salida.txt): Tiempos de arribo brutos.
+   - [`reporte.pdf`](model/reporte.pdf): Mapas de altura de olas, mareógrafos y parámetros técnicos.
 
 > [!WARNING]
 > Los endpoints deben invocarse en orden estricto: `/calculate` :arrow_right: `/tsunami-travel-times` :arrow_right: `/run-tsdhn`, ya que cada uno depende del resultado del anterior.
