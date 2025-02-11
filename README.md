@@ -5,7 +5,7 @@ El Orchestrator-TSDHN es una herramienta para la estimación de parámetros de t
 > [!IMPORTANT]
 > La lógica de los cálculos numéricos reside en este repositorio, mientras que la [interfaz web](https://github.com/totallynotdavid/picv-2025-web) (que gestiona solicitudes y entrega el informe al usuario final) opera en un entorno separado.
 
-A continuación, se muestra un diagrama que ilustra el flujo general de la API:
+A continuación, se muestra un diagrama que ilustra el flujo general del Orchestrator-TSDHN:
 
 ```mermaid
 flowchart TB
