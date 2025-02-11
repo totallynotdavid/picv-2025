@@ -100,6 +100,15 @@ En cuanto al hardware, se recomienda tener al menos 8 GB de RAM, un CPU con 4 n√
    poetry run pytest
    ```
 
+4. Para ejecutar la API:
+
+   ```bash
+   poetry run start
+   rq worker tsdhn_queue
+   ```
+
+   La API estar√° disponible en `http://localhost:8000`.
+
 ## Estructura del proyecto
 
 El repositorio se organiza en dos componentes principales:
