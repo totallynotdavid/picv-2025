@@ -1,0 +1,19 @@
+name: Security Report
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  security_checks:
+    runs-on: ubuntu-latest
+    name: PyCharm Security Scan
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: tonybaloney/pycharm-security@master
+        with:
+          path: orchestrator/
+          fail_on_warnings: "no"
