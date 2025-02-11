@@ -125,7 +125,7 @@ picv-2025/
 
 El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz web](https://github.com/totallynotdavid/picv-2025-web). La API gestiona los siguientes endpoints:
 
-1. [`/calculate`](orchestrator/main.py?plain=1#L25) recibe los valores para la magnitud (Mw), profundidad (h) y coordenadas del epicentro. Luego, calcula la geometría de la ruptura, el momento sísmico y evalúa el riesgo de tsunami. Genera el archivo [hypo.dat](model/hypo.dat) que se usará en la simulación.
+1. [`/calculate`](orchestrator/main.py?plain=1#L27) recibe los valores para la magnitud (Mw), profundidad (h) y coordenadas del epicentro. Luego, calcula la geometría de la ruptura, el momento sísmico y evalúa el riesgo de tsunami. Genera el archivo [hypo.dat](model/hypo.dat) que se usará en la simulación.
 
    Los siguientes campos deben enviarse en el cuerpo de la solicitud en formato JSON:
 
@@ -169,8 +169,8 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
    }
    ```
 
-2. [`/tsunami-travel-times`](orchestrator/main.py?plain=1#L43) utiliza los mismos datos de entrada y realiza una serie de integraciones vectorizadas para calcular los tiempos de arribo a puertos predefinidos ([`puertos.txt`](/model/puertos.txt)). La respuesta es un objeto JSON que incluye tanto los tiempos de arribo como las distancias a cada estación.
-3. [`/run-tsdhn`](orchestrator/main.py?plain=1#L59) llama al script [job.run](model/job.run), que procesa [hypo.dat](model/hypo.dat) y genera resultados en ~12 minutos (en un procesador de 8 núcleos). Produce:
+2. [`/tsunami-travel-times`](orchestrator/main.py?plain=1#L45) utiliza los mismos datos de entrada y realiza una serie de integraciones vectorizadas para calcular los tiempos de arribo a puertos predefinidos ([`puertos.txt`](/model/puertos.txt)). La respuesta es un objeto JSON que incluye tanto los tiempos de arribo como las distancias a cada estación.
+3. [`/run-tsdhn`](orchestrator/main.py?plain=1#L61) llama al script [job.run](model/job.run), que procesa [hypo.dat](model/hypo.dat) y genera resultados en ~12 minutos (en un procesador de 8 núcleos). Produce:
 
    - [`salida.txt`](model/salida.txt): Tiempos de arribo brutos.
    - [`reporte.pdf`](model/reporte.pdf): Mapas de altura de olas, mareógrafos y parámetros técnicos.
