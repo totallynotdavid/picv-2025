@@ -83,6 +83,7 @@ En cuanto al hardware, se recomienda tener al menos 8 GB de RAM, un CPU con 4 n�
 
    ```bash
    poetry install
+   poetry self add 'poethepoet[poetry_plugin]'
    eval $(poetry env activate)
    ```
 
@@ -185,10 +186,10 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
   [tool.pytest.ini_options]
   log_cli = true
   ```
-  Te recomiendo siempre `logger.debug()` en vez de `print()` o sino pytest lo ignorará.
-- Cuando termines de hacer cambios en el código y antes de hacer commit, ejecuta:
+  Te recomiendo usar `logger.debug()` en vez de `print()` o sino pytest lo ignorará.
+- Cuando termines de hacer cambios en el código, y antes de hacer commit, ejecuta:
   ```bash
   poetry run pytest
   poetry poe format
   ```
-  para formatear el código y asegurarte de todo sigue funcionando correctamente. En caso de que [poe](https://poethepoet.natn.io/poetry_plugin.html) no sea reconocido, ejecuta en tu terminal `poetry self add 'poethepoet[poetry_plugin]'`.
+  para formatear el código y asegurarte de todo sigue funcionando correctamente.
