@@ -134,6 +134,9 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
    | `dia`     | Día del mes del evento     | string         |
    | `hhmm`    | Hora y minutos del evento  | formato `HHMM` |
 
+   > [!WARNING]
+   > El modelo solo procesa magnitudes entre Mw 6.5 y Mw 9.5. Valores fuera de este rango resultarán en un error.
+
    Ten en cuenta que los modelos Pydantic (definidos en [schemas.py](orchestrator/models/schemas.py)) se encargan de validar y, en algunos casos, transformar estos parámetros para asegurar que el formato sea el correcto.
 
    Un ejemplo de solicitud (POST):
