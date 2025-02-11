@@ -2,9 +2,10 @@
 #mkdir zfolder 
 clear
 echo 'Estimación rápida de parámetros de tsunami de origen lejano'
-chmod 775 fault_plane
+chmod 775 fault_plane # proviene de fault_plane.f90
 ./fault_plane
-chmod 775 deform
+# pfalla.inp es generado por fault_plane.f90
+chmod 775 deform # proviene de def_oka.f, usa pfalla.inp como input
 ./deform
 chmod 775 tsunami
 ./tsunami
