@@ -4,6 +4,3 @@
 *.txt
 *.log
 .coverage
-
-# just runs an example request to each endpoints simulating the calls from the frontend
-client.py
