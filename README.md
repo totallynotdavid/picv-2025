@@ -59,10 +59,11 @@ flowchart TB
    poetry --version
    ```
 
-3. Dependencias adicionales: `gfortran 11.4.0`, `redis-server`
+3. Dependencias adicionales: `gfortran 11.4.0`, `redis-server`, `gmt` y `ps2eps`
 
    ```bash
-   sudo apt install -y gfortran redis-server
+   sudo apt install -y gfortran redis-server ps2eps
+   sudo apt install gmt gmt-dcw gmt-gshhg
    gfortran --version
    ```
 
@@ -99,6 +100,15 @@ En cuanto al hardware, se recomienda tener al menos 8 GB de RAM, un CPU con 4 n√
    ```bash
    poetry run pytest
    ```
+
+4. Para ejecutar la API:
+
+   ```bash
+   poetry run start
+   rq worker tsdhn_queue
+   ```
+
+   La API estar√° disponible en `http://localhost:8000`.
 
 ## Estructura del proyecto
 

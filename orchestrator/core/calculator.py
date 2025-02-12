@@ -438,7 +438,8 @@ class TsunamiCalculator:
             data: EarthquakeInput object containing earthquake data
         """
         try:
-            with open("hypo.dat", "w") as f:
+            hypo_path = self.data_path / "hypo.dat"
+            with open(hypo_path, "w") as f:
                 f.writelines(
                     [
                         f"{data.hhmm}\n",
