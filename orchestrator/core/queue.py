@@ -99,6 +99,7 @@ class TSDHNJob:
             job = self.queue.enqueue(
                 execute_tsdhn_commands,
                 job_id,
+                job_id=job_id,
                 job_timeout="2h",
                 result_ttl=86400,  # Keep results for 24 hours
             )
