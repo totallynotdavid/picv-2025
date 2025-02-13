@@ -105,17 +105,25 @@ def execute_tsdhn_commands(job_id: str) -> Dict:
                         "output": "deform",
                     },
                 )
-            # Temporarily disabled tsunami compilation (known issues with ifort)
-            # elif step_name == "tsunami":
-            #     compile_fortran(
-            #         model_dir,
-            #         {
-            #             "compiler": "ifort",
-            #             "flags": ["-parallel", "-fast"],
-            #             "source": "tsunami1.for",
-            #             "output": "tsunami",
-            #         },
-            #     )
+            elif step_name == "ttt_max":
+                compile_fortran(
+                    model_dir,
+                    {
+                        "compiler": "gfortran",
+                        "flags": [],
+                        "source": "ttt_max.f90",
+                        "output": "ttt_max",
+                    },
+                )
+
+            # Additional pre-execution steps
+            if step_name == "ttt_max":
+                validate_files(
+                    model_dir, [("mareograma.csh", "mareograma.csh script missing")]
+                )
+                subprocess.run(
+                    ["chmod", "775", "mareograma.csh"], cwd=model_dir, check=True
+                )
 
             # Execute and validate
             subprocess.run(["chmod", "775", cmd[0]], cwd=model_dir, check=True)
@@ -183,6 +191,8 @@ def execute_tsdhn_commands(job_id: str) -> Dict:
 
 
 class TSDHNJob:
+    """Main job handler class with Redis integration"""
+
     def __init__(self):
         self.redis = Redis(host="localhost", port=6379, db=0, socket_connect_timeout=5)
         self.queue = Queue("tsdhn_queue", connection=self.redis)
@@ -213,13 +223,14 @@ class TSDHNJob:
             job = Job.fetch(job_id, connection=self.redis)
             status = job.meta.get("status", JobStatus.QUEUED.value)
 
+            # Update status based on RQ's internal state
             if job.is_failed:
                 status = JobStatus.FAILED.value
                 job.meta.setdefault("error", "Job failed without specific error")
-
-            if job.is_finished and status != JobStatus.COMPLETED.value:
+            elif job.is_finished and status != JobStatus.COMPLETED.value:
                 status = JobStatus.COMPLETED.value
 
+            # Persist status changes
             job.meta["status"] = status
             job.save_meta()
 
