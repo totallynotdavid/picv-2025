@@ -131,13 +131,22 @@ def execute_tsdhn_commands(job_id: str) -> Dict:
             validate_files(model_dir, file_checks)
 
         # TTT Mundo processing
+        ttt_mundo_dir = model_dir / "ttt_mundo"
+
+        # We have to make sure that inverse (csh)
+        # is executable before ttt_inverso runs as
+        # it is called from within the script
+        inverse_script = ttt_mundo_dir / "inverse"
+        if not inverse_script.exists():
+            raise FileNotFoundError(f"inverse script not found at {inverse_script}")
+        subprocess.run(["chmod", "775", "inverse"], cwd=ttt_mundo_dir, check=True)
+
         ttt_steps = [
             (
                 "ttt_inverso",
                 ["./ttt_inverso"],
-                [("ttt_inverso.out", "TTT Inverso output missing")],
+                [],
             ),
-            ("inverse", ["./inverse"], [("inverse.log", "Inverse log missing")]),
         ]
 
         for step_name, cmd, file_checks in ttt_steps:
