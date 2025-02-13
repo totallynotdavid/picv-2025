@@ -82,7 +82,8 @@ async def test_tsdhn_api():
                                     print(f"Report saved as: {filename}")
                                 else:
                                     print(
-                                        f"Error fetching results: {await result_response.text()}"
+                                        "Error fetching results:",
+                                        f"{await result_response.text()}",
                                     )
                             break
                         elif status["status"] == "failed":
