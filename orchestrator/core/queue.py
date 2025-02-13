@@ -19,9 +19,7 @@ class JobStatus(Enum):
     FAILED = "failed"
 
 
-# Revised compilation and validation config
 PROCESSING_PIPELINE = [
-    # (Step name, command, output to validate)
     (
         "fault_plane",
         ["./fault_plane"],
@@ -30,13 +28,29 @@ PROCESSING_PIPELINE = [
     (
         "deform",
         ["./deform"],
+        [("deform", "Deform executable missing")],
+    ),
+    (
+        "tsunami",
+        ["./tsunami"],
         [
-            ("deform", "Deform executable missing"),
+            ("zfolder/green.dat", "Green data file missing"),
+            ("zfolder/zmax_a.grd", "Zmax grid file missing"),
         ],
     ),
-    ("tsunami", ["./tsunami"], [("tsunami.out")]),
-    ("maxola.csh", ["./maxola.csh"], [("maxola.out", "Maxola output missing")]),
-    ("ttt_max", ["./ttt_max"], [("ttt_max.out", "TTT Max output missing")]),
+    (
+        "maxola.csh",
+        ["./maxola.csh"],
+        [("maxola.eps", "Maxola output missing")],
+    ),
+    (
+        "ttt_max",
+        ["./ttt_max"],
+        [
+            ("zfolder/green_rev.dat", "Scaled wave height data output missing"),
+            ("ttt_max.dat", "TTT Max data output missing"),
+        ],
+    ),
 ]
 
 
@@ -55,9 +69,10 @@ def compile_fortran(source_dir: Path, config: dict) -> None:
 def validate_files(cwd: Path, checks: List[Tuple[str, str]]) -> None:
     """Validate multiple file existences with custom errors"""
     for filename, error_msg in checks:
-        if not (cwd / filename).exists():
-            logger.error(error_msg)
-            raise FileNotFoundError(f"{cwd}/{filename} {error_msg}")
+        full_path = cwd / filename
+        if not full_path.exists():
+            logger.error(f"{error_msg} at {full_path}")
+            raise FileNotFoundError(f"{full_path}: {error_msg}")
 
 
 def execute_tsdhn_commands(job_id: str) -> Dict:
@@ -103,7 +118,7 @@ def execute_tsdhn_commands(job_id: str) -> Dict:
             #     )
 
             # Execute and validate
-            subprocess.run(["chmod", "775", step_name], cwd=model_dir, check=True)
+            subprocess.run(["chmod", "775", cmd[0]], cwd=model_dir, check=True)
             subprocess.run(cmd, cwd=model_dir, check=True)
             validate_files(model_dir, file_checks)
 
@@ -128,7 +143,7 @@ def execute_tsdhn_commands(job_id: str) -> Dict:
                         "output": "ttt_inverso",
                     },
                 )
-            subprocess.run(["chmod", "775", step_name], cwd=ttt_mundo_dir, check=True)
+            subprocess.run(["chmod", "775", cmd[0]], cwd=ttt_mundo_dir, check=True)
             subprocess.run(cmd, cwd=ttt_mundo_dir, check=True)
             validate_files(ttt_mundo_dir, file_checks)
 
