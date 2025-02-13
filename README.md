@@ -70,7 +70,7 @@ flowchart TB
    Configura Redis para que sea gestionado por systemd (en Ubuntu):
 
    ```bash
-   sudo sed -i 's/supervised no/supervised systemd/' /etc/redis/redis.conf
+   sudo sed -i 's/^# \?supervised \(no\|auto\)/supervised systemd/' /etc/redis/redis.conf
    sudo systemctl restart redis-server
    ```
 
