@@ -3,7 +3,7 @@ import subprocess
 import uuid
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from redis import Redis
 from rq import Queue
@@ -19,18 +19,52 @@ class JobStatus(Enum):
     FAILED = "failed"
 
 
+class CompilerConfig:
+    def __init__(
+        self,
+        source: str,
+        output: str,
+        compiler: str = "gfortran",
+        flags: List[str] = None,
+    ):
+        self.source = source
+        self.output = output
+        self.compiler = compiler
+        self.flags = flags or []
+
+
+class ProcessingStep:
+    def __init__(
+        self,
+        name: str,
+        command: List[str],
+        file_checks: List[Tuple[str, str]],
+        compiler_config: Optional[CompilerConfig] = None,
+        pre_execute_checks: List[Tuple[str, str]] = None,
+        extra_executables: List[str] = None,
+    ):
+        self.name = name
+        self.command = command
+        self.file_checks = file_checks
+        self.compiler_config = compiler_config
+        self.pre_execute_checks = pre_execute_checks or []
+        self.extra_executables = extra_executables or []
+
+
 PROCESSING_PIPELINE = [
-    (
+    ProcessingStep(
         "fault_plane",
         ["./fault_plane"],
         [("pfalla.inp", "Input file for deform not generated")],
+        CompilerConfig("fault_plane.f90", "fault_plane"),
     ),
-    (
+    ProcessingStep(
         "deform",
         ["./deform"],
         [("deform", "Deform executable missing")],
+        CompilerConfig("def_oka.f", "deform"),
     ),
-    (
+    ProcessingStep(
         "tsunami",
         ["./tsunami"],
         [
@@ -38,30 +72,52 @@ PROCESSING_PIPELINE = [
             ("zfolder/zmax_a.grd", "Zmax grid file missing"),
         ],
     ),
-    (
+    ProcessingStep(
         "maxola.csh",
         ["./maxola.csh"],
         [("maxola.eps", "Maxola output missing")],
+        extra_executables=["espejo"],
     ),
-    (
+    ProcessingStep(
         "ttt_max",
         ["./ttt_max"],
         [
             ("zfolder/green_rev.dat", "Scaled wave height data output missing"),
             ("ttt_max.dat", "TTT Max data output missing"),
         ],
+        CompilerConfig("ttt_max.f90", "ttt_max"),
+        pre_execute_checks=[("mareograma.csh", "mareograma.csh script missing")],
+    ),
+]
+
+TTT_MUNDO_STEPS = [
+    ProcessingStep(
+        "ttt_inverso",
+        ["./ttt_inverso"],
+        [],
+        CompilerConfig("ttt_inverso.f", "ttt_inverso"),
+        extra_executables=["inverse"],
     ),
 ]
 
 
-def compile_fortran(source_dir: Path, config: dict) -> None:
+def make_executable(file_path: Path) -> None:
+    """Make a file executable with proper error handling"""
+    try:
+        subprocess.run(["chmod", "775", str(file_path)], check=True)
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to make {file_path} executable: {e}")
+        raise
+
+
+def compile_fortran(source_dir: Path, config: CompilerConfig) -> None:
     """Compile Fortran source with proper flags"""
     args = [
-        config["compiler"],
-        *config["flags"],
-        config["source"],
+        config.compiler,
+        *config.flags,
+        config.source,
         "-o",
-        config["output"],
+        config.output,
     ]
     subprocess.run(args, cwd=source_dir, check=True)
 
@@ -75,6 +131,29 @@ def validate_files(cwd: Path, checks: List[Tuple[str, str]]) -> None:
             raise FileNotFoundError(f"{full_path}: {error_msg}")
 
 
+def process_step(step: ProcessingStep, working_dir: Path) -> None:
+    """Process a single pipeline step"""
+    # Compile if necessary
+    if step.compiler_config:
+        compile_fortran(working_dir, step.compiler_config)
+        make_executable(working_dir / step.compiler_config.output)
+
+    # Pre-execution checks
+    if step.pre_execute_checks:
+        validate_files(working_dir, step.pre_execute_checks)
+        for check in step.pre_execute_checks:
+            make_executable(working_dir / check[0])
+
+    # Make additional executables executable
+    for executable in step.extra_executables:
+        make_executable(working_dir / executable)
+
+    # Execute main command and validate
+    make_executable(working_dir / step.command[0])
+    subprocess.run(step.command, cwd=working_dir, check=True)
+    validate_files(working_dir, step.file_checks)
+
+
 def execute_tsdhn_commands(job_id: str) -> Dict:
     """Execute TSDHN workflow with accurate file validation"""
     try:
@@ -83,98 +162,18 @@ def execute_tsdhn_commands(job_id: str) -> Dict:
         ttt_mundo_dir = model_dir / "ttt_mundo"
 
         # Main processing steps
-        for step_name, cmd, file_checks in PROCESSING_PIPELINE:
-            # Compile if necessary
-            if step_name == "fault_plane":
-                compile_fortran(
-                    model_dir,
-                    {
-                        "compiler": "gfortran",
-                        "flags": [],
-                        "source": "fault_plane.f90",
-                        "output": "fault_plane",
-                    },
-                )
-            elif step_name == "deform":
-                compile_fortran(
-                    model_dir,
-                    {
-                        "compiler": "gfortran",
-                        "flags": [],
-                        "source": "def_oka.f",
-                        "output": "deform",
-                    },
-                )
-            elif step_name == "ttt_max":
-                compile_fortran(
-                    model_dir,
-                    {
-                        "compiler": "gfortran",
-                        "flags": [],
-                        "source": "ttt_max.f90",
-                        "output": "ttt_max",
-                    },
-                )
-
-            # Additional pre-execution steps
-            if step_name == "ttt_max":
-                validate_files(
-                    model_dir, [("mareograma.csh", "mareograma.csh script missing")]
-                )
-                subprocess.run(
-                    ["chmod", "775", "mareograma.csh"], cwd=model_dir, check=True
-                )
-
-            # Execute and validate
-            subprocess.run(["chmod", "775", cmd[0]], cwd=model_dir, check=True)
-            subprocess.run(cmd, cwd=model_dir, check=True)
-            validate_files(model_dir, file_checks)
+        for step in PROCESSING_PIPELINE:
+            process_step(step, model_dir)
 
         # TTT Mundo processing
-        ttt_mundo_dir = model_dir / "ttt_mundo"
-
-        # We have to make sure that inverse (csh)
-        # is executable before ttt_inverso runs as
-        # it is called from within the script
-        inverse_script = ttt_mundo_dir / "inverse"
-        if not inverse_script.exists():
-            raise FileNotFoundError(f"inverse script not found at {inverse_script}")
-        subprocess.run(["chmod", "775", "inverse"], cwd=ttt_mundo_dir, check=True)
-
-        ttt_steps = [
-            (
-                "ttt_inverso",
-                ["./ttt_inverso"],
-                [],
-            ),
-        ]
-
-        for step_name, cmd, file_checks in ttt_steps:
-            if step_name == "ttt_inverso":
-                compile_fortran(
-                    ttt_mundo_dir,
-                    {
-                        "compiler": "gfortran",
-                        "flags": [],
-                        "source": "ttt_inverso.f",
-                        "output": "ttt_inverso",
-                    },
-                )
-            subprocess.run(["chmod", "775", cmd[0]], cwd=ttt_mundo_dir, check=True)
-            subprocess.run(cmd, cwd=ttt_mundo_dir, check=True)
-            validate_files(ttt_mundo_dir, file_checks)
+        for step in TTT_MUNDO_STEPS:
+            process_step(step, ttt_mundo_dir)
 
         # Final report generation
-        compile_fortran(
-            model_dir,
-            {
-                "compiler": "gfortran",
-                "flags": [],
-                "source": "reporte.f90",
-                "output": "reporte",
-            },
-        )
-        subprocess.run(["chmod", "775", "reporte"], cwd=model_dir, check=True)
+        report_config = CompilerConfig("reporte.f90", "reporte")
+        compile_fortran(model_dir, report_config)
+        make_executable(model_dir / "reporte")
+
         subprocess.run(["./reporte"], cwd=model_dir, check=True)
         validate_files(model_dir, [("reporte.txt", "Report text output missing")])
 
@@ -202,8 +201,10 @@ def execute_tsdhn_commands(job_id: str) -> Dict:
 class TSDHNJob:
     """Main job handler class with Redis integration"""
 
-    def __init__(self):
-        self.redis = Redis(host="localhost", port=6379, db=0, socket_connect_timeout=5)
+    def __init__(self, redis_host="localhost", redis_port=6379, redis_db=0):
+        self.redis = Redis(
+            host=redis_host, port=redis_port, db=redis_db, socket_connect_timeout=5
+        )
         self.queue = Queue("tsdhn_queue", connection=self.redis)
 
     def enqueue_job(self) -> str:
