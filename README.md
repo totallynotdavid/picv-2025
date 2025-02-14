@@ -95,6 +95,13 @@ flowchart TB
   source ~/.bashrc
   ```
 
+  Configurando:
+
+  ```bash
+  tlmgr --usermode init-usertree
+  tlmgr --usermode update --self --all
+  ```
+
 5. Dependencias adicionales: `gfortran 11.4.0`, `redis-server`, `gmt`, `ps2eps`, `cmake` (ttt_client), `perl` (para TeXLive), `wget`
 
    ```bash
