@@ -59,7 +59,7 @@ flowchart TB
    poetry --version
    ```
 
-3. Dependencias adicionales: `gfortran 11.4.0`, `redis-server`, `gmt` y `ps2eps`
+3. Dependencias adicionales: `gfortran 11.4.0`, `redis-server`, `gmt`, `ps2eps`, `cmake` (ttt_client)
 
    ```bash
    sudo apt install -y gfortran redis-server ps2eps

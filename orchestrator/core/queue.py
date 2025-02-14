@@ -175,7 +175,7 @@ def execute_tsdhn_commands(job_id: str) -> Dict:
         make_executable(model_dir / "reporte")
 
         subprocess.run(["./reporte"], cwd=model_dir, check=True)
-        validate_files(model_dir, [("reporte.txt", "Report text output missing")])
+        validate_files(model_dir, [("salida.txt", "Report text output missing")])
 
         subprocess.run(["pdflatex", "reporte.tex"], cwd=model_dir, check=True)
         validate_files(model_dir, [("reporte.pdf", "PDF report not generated")])
