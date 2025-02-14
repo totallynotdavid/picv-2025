@@ -59,12 +59,47 @@ flowchart TB
    poetry --version
    ```
 
-3. Dependencias adicionales: `gfortran 11.4.0`, `redis-server`, `gmt`, `ps2eps`, `cmake` (ttt_client)
+3. TTT
+
+4. TeXLive para generar el informe en formato PDF 
+
+  ```bash
+  cd /tmp
+  wget https://mirror.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz
+  zcat < install-tl-unx.tar.gz | tar xf -
+  cd install-tl-2*
+  ```
+
+  Luego, creamos el perfil de instalación:
+
+  ```bash
+  cat > texlive.profile << EOF
+  selected_scheme scheme-basic
+  instopt_letter 0
+  tlpdbopt_autobackup 0
+  tlpdbopt_install_docfiles 0
+  tlpdbopt_install_srcfiles 0
+  EOF
+  ```
+
+  Finalmente, instalamos TeXLive:
+
+  ```bash
+  sudo perl ./install-tl --profile=texlive.profile --no-interaction
+  ```
+
+  Asegúrate de agregar TeXLive a tu `$PATH`:
+
+  ```bash
+  echo -e '\nexport PATH=/usr/local/texlive/$(ls -1 /usr/local/texlive/ | grep -E "^[0-9]{4}$" | sort -r | head -n 1)/bin/x86_64-linux:$PATH' >> ~/.bashrc
+  source ~/.bashrc
+  ```
+
+5. Dependencias adicionales: `gfortran 11.4.0`, `redis-server`, `gmt`, `ps2eps`, `cmake` (ttt_client), `perl` (para TeXLive), `wget`
 
    ```bash
-   sudo apt install -y gfortran redis-server ps2eps
+   sudo apt install -y gfortran redis-server ps2eps perl
    sudo apt install gmt gmt-dcw gmt-gshhg
-   gfortran --version
    ```
 
    Configura Redis para que sea gestionado por systemd (en Ubuntu):
@@ -74,7 +109,7 @@ flowchart TB
    sudo systemctl restart redis-server
    ```
 
-4. Opcional: [MATLAB R2014](https://drive.google.com/file/d/1VhLnwXX78Y7O8huwlRuE-shOW2LKlVpd/view?usp=drive_link) (si piensas ejecutar la interfaz gráfica original: [<kbd>tsunami.m</kbd>](model/tsunami.m))
+6. Opcional: [MATLAB R2014](https://drive.google.com/file/d/1VhLnwXX78Y7O8huwlRuE-shOW2LKlVpd/view?usp=drive_link) (si piensas ejecutar la interfaz gráfica original: [<kbd>tsunami.m</kbd>](model/tsunami.m))
 
 En cuanto al hardware, se recomienda tener al menos 8 GB de RAM, un CPU con 4 núcleos físicos y 5 GB de espacio libre en disco.
 
