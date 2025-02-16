@@ -71,7 +71,7 @@ sudo apt update -y && sudo apt upgrade -y
    ```
 
    Si estás usando Linux de forma nativa, entonces añade como lo indican en la documentación de pyenv [[3](https://github.com/pyenv/pyenv?tab=readme-ov-file#bash)]:
-   
+
    ```bash
    echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
    echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
@@ -79,7 +79,7 @@ sudo apt update -y && sudo apt upgrade -y
    ```
 
    Finalmente, en cualquiera de los casos, ejecuta:
-   
+
    ```bash
    source ~/.bashrc
    pyenv install 3.13
@@ -109,7 +109,7 @@ sudo apt update -y && sudo apt upgrade -y
    ```
 
    Verifica la instalación:
-   
+
    ```bash
    poetry --version
    ```
@@ -117,12 +117,13 @@ sudo apt update -y && sudo apt upgrade -y
 3. **TTTAPI** (Tsunami Travel Time):
 
    Los archivos de datos del repositorio requieren de git-lfs:
+
    ```bash
    sudo apt install -y git-lfs
    ```
-   
+
    Instalación de TTTAPI:
-   
+
    ```bash
    git clone https://gitlab.com/totallynotdavid/tttapi/
    cd tttapi
@@ -146,9 +147,9 @@ sudo apt update -y && sudo apt upgrade -y
    zcat < install-tl-unx.tar.gz | tar xf -
    cd install-tl-2*
    ```
-   
+
    Creación del perfil de instalación básico:
-   
+
    ```bash
    cat > texlive.profile << EOF
    selected_scheme scheme-basic
@@ -157,18 +158,18 @@ sudo apt update -y && sudo apt upgrade -y
    tlpdbopt_install_srcfiles 0
    EOF
    ```
-   
+
    La instalación se realiza en la carpeta del usuario para evitar problemas con los permisos y evitar el [modo usuario](https://www.tug.org/texlive/doc/tlmgr.html#USER-MODE) de texlive (no recomendado) [[4](https://tex.stackexchange.com/a/676880)]:
-   
+
    ```bash
    perl ./install-tl --profile=texlive.profile \
                      --texdir "$HOME/texlive" \
                      --texuserdir "$HOME/.texlive" \
                      --no-interaction
    ```
-   
+
    Configuración del PATH:
-   
+
    ```bash
    echo -e '\nexport PATH="$HOME/texlive/bin/x86_64-linux:$PATH"' >> ~/.bashrc
    source ~/.bashrc
@@ -181,7 +182,7 @@ sudo apt update -y && sudo apt upgrade -y
    tlmgr install babel-spanish hyphen-spanish booktabs
    ```
 
-6. Dependencias adicionales: `gfortran 11.4.0`, `redis-server`, `gmt`, `ps2eps`, `cmake` (ttt_client), `perl` (para TeXLive), `wget`
+5. Dependencias adicionales: `gfortran 11.4.0`, `redis-server`, `gmt`, `ps2eps`, `cmake` (ttt_client), `perl` (para TeXLive), `wget`
 
    ```bash
    sudo apt install -y gfortran redis-server ps2eps gmt gmt-dcw gmt-gshhg
@@ -194,7 +195,7 @@ sudo apt update -y && sudo apt upgrade -y
    sudo systemctl restart redis-server
    ```
 
-7. Si necesitas ejecutar la interfaz gráfica original ([<kbd>tsunami.m</kbd>](model/tsunami.m)), puedes instalar [MATLAB R2014](https://drive.google.com/file/d/1VhLnwXX78Y7O8huwlRuE-shOW2LKlVpd/view?usp=drive_link).
+6. Si necesitas ejecutar la interfaz gráfica original ([<kbd>tsunami.m</kbd>](model/tsunami.m)), puedes instalar [MATLAB R2014](https://drive.google.com/file/d/1VhLnwXX78Y7O8huwlRuE-shOW2LKlVpd/view?usp=drive_link).
 
 **Pasos de instalación:**
 
