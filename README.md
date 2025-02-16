@@ -40,73 +40,123 @@ flowchart TB
 ## Instalación
 
 > [!WARNING]
-> El proyecto ha sido desarrollado para ejecutarse en entornos Linux (recomendamos utilizar **Ubuntu 20.04**). Para usuarios de Windows, es necesario configurar **Windows Subsystem for Linux (WSL versión 2.0 o superior)**. Puedes seguir la guía oficial de Microsoft para instalar WSL: [<kbd>Instalación de WSL</kbd>](https://learn.microsoft.com/es-es/windows/wsl/install).
+> Este proyecto está diseñado para entornos Linux (recomendamos **Ubuntu 20.04**). Si utilizas Windows, necesitarás configurar **Windows Subsystem for Linux** (WSL versión 2.0 o superior). Para instalar WSL, sigue la guía oficial de Microsoft: [<kbd>Instalación de WSL</kbd>](https://learn.microsoft.com/es-es/windows/wsl/install).
 
 **Prerrequisitos:**
 
-1. Python 3.10.0
+Antes de comenzar con la instalación, actualiza tu sistema:
+
+```bash
+sudo apt update -y && sudo apt upgrade -y
+```
+
+1. _Python_:
+
+   <table><tr><td>**Opción A**: Usando pyenv (Recomendado)</td></tr></table>
+
+   Con pyenv podrás manejar múltiples versiones de Python de forma sencilla.
+
    ```bash
-   sudo apt update -y && sudo apt upgrade -y
-   python3 --version
+   sudo apt-get install build-essential zlib1g-dev libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev libncurses-dev tk-dev
+   curl -fsSL https://pyenv.run | bash
+   ```
+
+   Si estás usando WSL, añade lo siguiente a tu `~/.bashrc`:
+
+   ```bash
+   echo '
+   export PYENV_ROOT="$HOME/.pyenv"
+   export PATH="$PYENV_ROOT/bin:$PATH"
+   eval "$(pyenv init -)"' >> ~/.bashrc
+
+   source ~/.bashrc
+   pyenv install 3.13
+   ```
+
+   <table><tr><td>**Opción B**: Python predeterminado</td></tr></table>
+
+   Si prefieres no usar pyenv:
+
+   ```bash
    sudo apt install -y python3-pip
    ```
-2. Poetry 2.0.1 (utilizamos Poetry para manejar nuestras dependencias)
+
+   En ambos casos, verifica la instalación:
+
+   ```bash
+   python3 -V
+   pip3 -V
+   ```
+
+2. _Poetry_ nos auyda a gestionar las dependencias del proyecto de forma consistente entre dispositivos.
 
    ```bash
    curl -sSL https://install.python-poetry.org | python3 -
    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
    source ~/.bashrc
-   poetry --version
    ```
 
-3. TTT
+> [!TIP]
+> Verifica la instalación con: `poetry --version`
 
-4. TeXLive para generar el informe en formato PDF 
+3. _TTTAPI_ (Tsunami Travel Time):
 
-  ```bash
-  cd /tmp
-  wget https://mirror.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz
-  zcat < install-tl-unx.tar.gz | tar xf -
-  cd install-tl-2*
-  ```
+   ```bash
+   sudo apt install git-lfs
 
-  Luego, creamos el perfil de instalación:
+   # Instalación de TTTAPI
+   git clone https://gitlab.com/totallynotdavid/tttapi/
+   cd tttapi
+   make config
+   make compile
+   sudo make install
+   sudo make datadir
+   sudo make docs
+   make test
+   make clean
+   ```
 
-  ```bash
-  cat > texlive.profile << EOF
-  selected_scheme scheme-basic
-  instopt_letter 0
-  tlpdbopt_autobackup 0
-  tlpdbopt_install_docfiles 0
-  tlpdbopt_install_srcfiles 0
-  EOF
-  ```
+> [!NOTE]
+> TTTAPI is hosted under Gitlab because the data files are big and we need to use git lfs / also for CI. The version hosted in Gitlab is just a mirror from the original authors.
 
-  Finalmente, instalamos TeXLive:
+4. _TeXLive_ es necesario para generar los informes en formato PDF.
 
-  ```bash
-  sudo perl ./install-tl --profile=texlive.profile --no-interaction
-  ```
+   ```bash
+   cd /tmp
+   wget https://mirror.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz
+   zcat < install-tl-unx.tar.gz | tar xf -
+   cd install-tl-2*
 
-  Asegúrate de agregar TeXLive a tu `$PATH`:
+   # Creación del perfil de instalación
+   cat > texlive.profile << EOF
+   selected_scheme scheme-basic
+   tlpdbopt_autobackup 0
+   tlpdbopt_install_docfiles 0
+   tlpdbopt_install_srcfiles 0
+   EOF
 
-  ```bash
-  echo -e '\nexport PATH=/usr/local/texlive/$(ls -1 /usr/local/texlive/ | grep -E "^[0-9]{4}$" | sort -r | head -n 1)/bin/x86_64-linux:$PATH' >> ~/.bashrc
-  source ~/.bashrc
-  ```
+   # Instalación
+   perl ./install-tl --profile=texlive.profile \
+                     --texdir "$HOME/texlive" \
+                     --texuserdir "$HOME/.texlive" \
+                     --no-interaction
 
-  Configurando:
+   # Configuración del PATH
+   echo -e '\nexport PATH="$HOME/texlive/bin/x86_64-linux:$PATH"' >> ~/.bashrc
+   source ~/.bashrc
+   ```
 
-  ```bash
-  tlmgr --usermode init-usertree
-  tlmgr --usermode update --self --all
-  ```
+   Instalando paquetes de LaTeX con tlmgr:
+
+   ```bash
+   tlmgr update --self
+   tlmgr install babel-spanish hyphen-spanish booktabs
+   ```
 
 5. Dependencias adicionales: `gfortran 11.4.0`, `redis-server`, `gmt`, `ps2eps`, `cmake` (ttt_client), `perl` (para TeXLive), `wget`
 
    ```bash
-   sudo apt install -y gfortran redis-server ps2eps perl
-   sudo apt install gmt gmt-dcw gmt-gshhg
+   sudo apt install -y gfortran redis-server ps2eps gmt gmt-dcw gmt-gshhg
    ```
 
    Configura Redis para que sea gestionado por systemd (en Ubuntu):
@@ -116,20 +166,18 @@ flowchart TB
    sudo systemctl restart redis-server
    ```
 
-6. Opcional: [MATLAB R2014](https://drive.google.com/file/d/1VhLnwXX78Y7O8huwlRuE-shOW2LKlVpd/view?usp=drive_link) (si piensas ejecutar la interfaz gráfica original: [<kbd>tsunami.m</kbd>](model/tsunami.m))
-
-En cuanto al hardware, se recomienda tener al menos 8 GB de RAM, un CPU con 4 núcleos físicos y 5 GB de espacio libre en disco.
+6. Si necesitas ejecutar la interfaz gráfica original ([<kbd>tsunami.m</kbd>](model/tsunami.m)), puedes instalar [MATLAB R2014](https://drive.google.com/file/d/1VhLnwXX78Y7O8huwlRuE-shOW2LKlVpd/view?usp=drive_link).
 
 **Pasos de instalación:**
 
-1. Clonar el repositorio:
+1. Clona el repositorio:
 
    ```bash
    git clone https://github.com/totallynotdavid/picv-2025
    cd picv-2025
    ```
 
-2. Instalar dependencias con Poetry:
+2. Instala las dependencias con Poetry:
 
    ```bash
    poetry install
@@ -137,20 +185,23 @@ En cuanto al hardware, se recomienda tener al menos 8 GB de RAM, un CPU con 4 n�
    eval $(poetry env activate)
    ```
 
-3. Verificar la instalación ejecutando:
+3. Verifica la instalación:
 
    ```bash
    poetry run pytest
    ```
 
-4. Para ejecutar la API:
+4. Inicia la API:
 
    ```bash
    poetry run start
    rq worker tsdhn_queue
    ```
 
-   La API estará disponible en `http://localhost:8000`.
+   Es importante que ejecutes `rq worker tsdhn_queue` en el entorno de Poetry o rq no se encontrará.
+
+> [!NOTE]
+> La API estará disponible en `http://localhost:8000`
 
 ## Estructura del proyecto
 
