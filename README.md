@@ -50,32 +50,44 @@ Antes de comenzar con la instalación, actualiza tu sistema:
 sudo apt update -y && sudo apt upgrade -y
 ```
 
-1. _Python_:
+1. **Python**:
 
-   <table><tr><td>**Opción A**: Usando pyenv (Recomendado)</td></tr></table>
+   <table><tr><td>Opción A: Usando pyenv (recomendado)</td></tr></table>
 
-   Con pyenv podrás manejar múltiples versiones de Python de forma sencilla.
+   Con pyenv podrás manejar múltiples versiones de Python de forma sencilla. Ejecuta los siguientes comandos para instalar las dependencias de pyenv para compilar versiones más modernas de Python [[1](https://stackoverflow.com/a/74314165)] y luego instalar pyenv en sí.
 
    ```bash
    sudo apt-get install build-essential zlib1g-dev libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev libncurses-dev tk-dev
    curl -fsSL https://pyenv.run | bash
    ```
 
-   Si estás usando WSL, añade lo siguiente a tu `~/.bashrc`:
+   Si estás usando WSL, añade lo siguiente a `~/.bashrc` [[2](https://stackoverflow.com/a/76483889)]:
 
    ```bash
    echo '
    export PYENV_ROOT="$HOME/.pyenv"
    export PATH="$PYENV_ROOT/bin:$PATH"
    eval "$(pyenv init -)"' >> ~/.bashrc
+   ```
 
+   Si estás usando Linux de forma nativa, entonces añade como lo indican en la documentación de pyenv [[3](https://github.com/pyenv/pyenv?tab=readme-ov-file#bash)]:
+   
+   ```bash
+   echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
+   echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+   echo 'eval "$(pyenv init - bash)"' >> ~/.bashrc
+   ```
+
+   Finalmente, en cualquiera de los casos, ejecuta:
+   
+   ```bash
    source ~/.bashrc
    pyenv install 3.13
    ```
 
-   <table><tr><td>**Opción B**: Python predeterminado</td></tr></table>
+   <table><tr><td>Opción B: Python del sistema</td></tr></table>
 
-   Si prefieres no usar pyenv:
+   Si prefieres usar la versión de Python que viene con Ubuntu es probable que solo necesites instalar pip3:
 
    ```bash
    sudo apt install -y python3-pip
@@ -88,7 +100,7 @@ sudo apt update -y && sudo apt upgrade -y
    pip3 -V
    ```
 
-2. _Poetry_ nos auyda a gestionar las dependencias del proyecto de forma consistente entre dispositivos.
+2. **Poetry** nos ayuda a gestionar las dependencias del proyecto de forma consistente entre dispositivos.
 
    ```bash
    curl -sSL https://install.python-poetry.org | python3 -
@@ -96,15 +108,22 @@ sudo apt update -y && sudo apt upgrade -y
    source ~/.bashrc
    ```
 
-> [!TIP]
-> Verifica la instalación con: `poetry --version`
-
-3. _TTTAPI_ (Tsunami Travel Time):
-
+   Verifica la instalación:
+   
    ```bash
-   sudo apt install git-lfs
+   poetry --version
+   ```
 
-   # Instalación de TTTAPI
+3. **TTTAPI** (Tsunami Travel Time):
+
+   Los archivos de datos del repositorio requieren de git-lfs:
+   ```bash
+   sudo apt install -y git-lfs
+   ```
+   
+   Instalación de TTTAPI:
+   
+   ```bash
    git clone https://gitlab.com/totallynotdavid/tttapi/
    cd tttapi
    make config
@@ -117,43 +136,52 @@ sudo apt update -y && sudo apt upgrade -y
    ```
 
 > [!NOTE]
-> TTTAPI is hosted under Gitlab because the data files are big and we need to use git lfs / also for CI. The version hosted in Gitlab is just a mirror from the original authors.
+> TTTAPI is hosted under Gitlab because the data files are big and we need to use git lfs (and it is free). The version hosted in Gitlab is just a mirror from the original authors to avoid hitting their server constantly with our CI/CD.
 
-4. _TeXLive_ es necesario para generar los informes en formato PDF.
+4. **TeXLive** es necesario para generar los informes en formato PDF.
 
    ```bash
    cd /tmp
    wget https://mirror.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz
    zcat < install-tl-unx.tar.gz | tar xf -
    cd install-tl-2*
-
-   # Creación del perfil de instalación
+   ```
+   
+   Creación del perfil de instalación básico:
+   
+   ```bash
    cat > texlive.profile << EOF
    selected_scheme scheme-basic
    tlpdbopt_autobackup 0
    tlpdbopt_install_docfiles 0
    tlpdbopt_install_srcfiles 0
    EOF
-
-   # Instalación
+   ```
+   
+   La instalación se realiza en la carpeta del usuario para evitar problemas con los permisos y evitar el [modo usuario](https://www.tug.org/texlive/doc/tlmgr.html#USER-MODE) de texlive (no recomendado) [[4](https://tex.stackexchange.com/a/676880)]:
+   
+   ```bash
    perl ./install-tl --profile=texlive.profile \
                      --texdir "$HOME/texlive" \
                      --texuserdir "$HOME/.texlive" \
                      --no-interaction
-
-   # Configuración del PATH
+   ```
+   
+   Configuración del PATH:
+   
+   ```bash
    echo -e '\nexport PATH="$HOME/texlive/bin/x86_64-linux:$PATH"' >> ~/.bashrc
    source ~/.bashrc
    ```
 
-   Instalando paquetes de LaTeX con tlmgr:
+   Finalmente, es necesario instalar algunos paquetes de LaTeX con tlmgr para que funcione con nuestra configuración actual:
 
    ```bash
    tlmgr update --self
    tlmgr install babel-spanish hyphen-spanish booktabs
    ```
 
-5. Dependencias adicionales: `gfortran 11.4.0`, `redis-server`, `gmt`, `ps2eps`, `cmake` (ttt_client), `perl` (para TeXLive), `wget`
+6. Dependencias adicionales: `gfortran 11.4.0`, `redis-server`, `gmt`, `ps2eps`, `cmake` (ttt_client), `perl` (para TeXLive), `wget`
 
    ```bash
    sudo apt install -y gfortran redis-server ps2eps gmt gmt-dcw gmt-gshhg
@@ -166,7 +194,7 @@ sudo apt update -y && sudo apt upgrade -y
    sudo systemctl restart redis-server
    ```
 
-6. Si necesitas ejecutar la interfaz gráfica original ([<kbd>tsunami.m</kbd>](model/tsunami.m)), puedes instalar [MATLAB R2014](https://drive.google.com/file/d/1VhLnwXX78Y7O8huwlRuE-shOW2LKlVpd/view?usp=drive_link).
+7. Si necesitas ejecutar la interfaz gráfica original ([<kbd>tsunami.m</kbd>](model/tsunami.m)), puedes instalar [MATLAB R2014](https://drive.google.com/file/d/1VhLnwXX78Y7O8huwlRuE-shOW2LKlVpd/view?usp=drive_link).
 
 **Pasos de instalación:**
 
