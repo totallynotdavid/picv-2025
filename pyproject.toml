@@ -9,7 +9,6 @@ license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "ruff (>=0.9.3,<0.10.0)",
     "fastapi (>=0.115.7,<0.116.0)",
     "uvicorn (>=0.34.0,<0.35.0)",
     "pydantic (>=2.10.6,<3.0.0)",
@@ -17,7 +16,6 @@ dependencies = [
     "numpy (==2.2.2)",
     "redis (>=5.2.1,<6.0.0)",
     "rq (>=2.1.0,<3.0.0)",
-    "aiofiles (>=24.1.0,<25.0.0)",
 ]
 
 [build-system]
@@ -32,6 +30,11 @@ pytest = "^7.4.0"
 pytest-asyncio = "^0.21.0"
 httpx = "^0.25.0"
 pytest-cov = "^4.1.0"
+
+
+[tool.poetry.group.dev.dependencies]
+aiohttp = "^3.11.12"
+ruff = "^0.9.6"
 
 [tool.pytest.ini_options]
 log_cli = false
