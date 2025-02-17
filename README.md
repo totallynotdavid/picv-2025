@@ -175,10 +175,10 @@ sudo apt update -y && sudo apt upgrade -y
    tlmgr update --self && tlmgr install babel-spanish hyphen-spanish booktabs
    ```
 
-5. Dependencias adicionales: `gfortran`, `redis-server`, `gmt`, `ps2eps`. Ejecute:
+5. Dependencias adicionales: `gfortran`, `redis-server`, `gmt`, `ps2eps`, `csh`. Ejecute:
 
    ```bash
-   sudo apt install -y gfortran redis-server gmt gmt-dcw gmt-gshhg ps2eps
+   sudo apt install -y gfortran redis-server gmt gmt-dcw gmt-gshhg ps2eps csh
    ```
 
    Configura Redis para ser gestionado por systemd:
