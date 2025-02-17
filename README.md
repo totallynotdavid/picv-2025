@@ -56,7 +56,7 @@ sudo apt update -y && sudo apt upgrade -y
    curl -fsSL https://pyenv.run | bash
    ```
 
-   **Si estás usando WSL**, ejecuta lo siguiente [[1](https://stackoverflow.com/a/76483889)]:
+   <ins>Si estás usando WSL</ins>, ejecuta lo siguiente [[1](https://stackoverflow.com/a/76483889)]:
 
    ```bash
    echo '
@@ -65,7 +65,7 @@ sudo apt update -y && sudo apt upgrade -y
    eval "$(pyenv init -)"' >> ~/.bashrc
    ```
 
-   **Si estás usando Linux de forma nativa**, ejecuta lo siguiente [[2](https://github.com/pyenv/pyenv?tab=readme-ov-file#bash)]:
+   <ins>Si estás usando Linux de forma nativa</ins>, ejecuta lo siguiente [[2](https://github.com/pyenv/pyenv?tab=readme-ov-file#bash)]:
 
    ```bash
    echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
@@ -98,14 +98,14 @@ sudo apt update -y && sudo apt upgrade -y
    sudo apt install -y python3-pip
    ```
 
-   En ambos casos, verifica la instalación:
+   En cualquiera de los dos casos, verifica la instalación:
 
    ```bash
    python3 -V
    pip3 -V
    ```
 
-2. **Poetry** nos ayuda a gestionar nuestras dependencias de forma consistente entre dispositivos. Se encarga de instalar y mantener las librerías que usamos.
+2. [**Poetry**](https://python-poetry.org/docs) nos ayuda a gestionar nuestras dependencias de forma consistente entre dispositivos. Poetry se encarga de instalar las librerías que usamos.
 
    ```bash
    curl -sSL https://install.python-poetry.org | python3 -
@@ -119,15 +119,15 @@ sudo apt update -y && sudo apt upgrade -y
    poetry --version
    ```
 
-3. **TTT SDK** (Tsunami Travel Time) es una herramienta para el cálculo y visualización del tiempo de viaje de tsunamis:
+3. El software [**TTT SDK**](https://www.geoware-online.com/tsunami.html) (Tsunami Travel Time) calcula tiempos de arribo de un tsunami a partir de la batimetría de una cuadrícula geográfica.
 
-   Necesitas git-lfs para clonar los archivos de datos grandes del repositorio:
+   Primero, necesitas `git-lfs` para clonar los archivos de datos grandes del repositorio y `cmake` para compilar e instalar el software:
 
    ```bash
-   sudo apt install -y git-lfs
+   sudo apt install -y git-lfs cmake
    ```
 
-   Para instalar TTTAPI:
+   Para instalar el TTT SDK:
 
    ```bash
    git clone https://gitlab.com/totallynotdavid/tttapi/
@@ -142,9 +142,9 @@ sudo apt update -y && sudo apt upgrade -y
    ```
 
 > [!NOTE]
-> Usamos GitLab para alojar TTTAPI porque permite usar git-lfs de forma gratuita para archivos grandes. Esta versión es una copia del código original, lo que nos ayuda a no sobrecargar los servidores de los autores cuando ejecutamos nuestras pruebas automáticas.
+> TTT SDK está alojado en GitLab porque ofrece un mejor plan gratuito para archivos grandes (git-lfs) y evita sobrecargar los servidores originales durante nuestras pruebas de CI/CD.
 
-4. **TeXLive** es necesario para la generación de los informes en formato PDF.
+4. **TeXLive** es necesario para la generación de los informes en formato PDF. Esta guía usa una instalación mínima para simplificar el proceso.
 
    ```bash
    cd /tmp
@@ -153,7 +153,7 @@ sudo apt update -y && sudo apt upgrade -y
    cd install-tl-2*
    ```
 
-   Creamos un perfil de instalación básico:
+   Creamos un perfil de instalación con `scheme-basic`:
 
    ```bash
    cat > texlive.profile << EOF
@@ -187,10 +187,10 @@ sudo apt update -y && sudo apt upgrade -y
    tlmgr install babel-spanish hyphen-spanish booktabs
    ```
 
-5. Dependencias adicionales: `cmake` (ttt_client) `gfortran 11.4.0`, `redis-server`, `gmt`, `ps2eps`
+5. Dependencias adicionales: `gfortran 11.4.0`, `redis-server`, `gmt`, `ps2eps`
 
    ```bash
-   sudo apt install -y cmake gfortran redis-server gmt gmt-dcw gmt-gshhg ps2eps
+   sudo apt install -y gfortran redis-server gmt gmt-dcw gmt-gshhg ps2eps
    ```
 
    Configura Redis para ser gestionado por systemd:
