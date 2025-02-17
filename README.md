@@ -271,6 +271,7 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
    Ten en cuenta que los modelos Pydantic (definidos en [`schemas.py`](orchestrator/models/schemas.py)) se encargan de validar y, en algunos casos, transformar estos parámetros para asegurar que el formato sea el correcto.
    <details>
    <summary>Ejemplo de solicitud</summary>
+   
    ```json
    {
      "Mw": 7.5,
@@ -281,6 +282,7 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
      "hhmm": "1430"
    }
    ```
+   
    </details>
 
    <details>
