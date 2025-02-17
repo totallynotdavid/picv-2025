@@ -312,7 +312,7 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
 Además de las [pruebas unitarias](orchestrator/tests/), proporcionamos un script ([`example.py`](example.py)) para evaluar el comportamiento del modelo con parámetros personalizados. Para su uso, **la API debe estar activa** en segundo plano. Verifica su disponibilidad con:
 
 ```bash
-curl -fsS http://localhost:8000/health-check
+curl -fsS http://localhost:8000/health
 ```
 
 Para modificar los parámetros del evento sísmico, edita <kbd>earthquake_data</kbd> en [example.py](example.py?plain=1#L13). Luego, ejecuta:
