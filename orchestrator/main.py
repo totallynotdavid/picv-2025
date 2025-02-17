@@ -1,9 +1,9 @@
 import logging
 from datetime import datetime
-from typing import Dict
+from typing import Dict, List, Optional
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -33,6 +33,8 @@ app.add_middleware(
 # Initialize services
 calculator = TsunamiCalculator()
 tsdhn_queue = TSDHNJob()
+
+skip_steps_default = Query(None)  # Used on /run-tsdhn endpoint to skip steps
 
 
 @app.post("/calculate", response_model=CalculationResponse)
@@ -95,7 +97,7 @@ async def tsunami_travel_times_endpoint(data: EarthquakeInput):
 
 
 @app.post("/run-tsdhn")
-async def run_tsdhn_endpoint():
+async def run_tsdhn_endpoint(skip_steps: Optional[List[str]] = skip_steps_default):
     """
     Enqueue a TSDHN model execution job.
 
@@ -111,7 +113,12 @@ async def run_tsdhn_endpoint():
     """
     try:
         logger.info("Enqueueing new TSDHN job")
-        job_id = tsdhn_queue.enqueue_job(skip_steps=["tsunami"])
+        if skip_steps:
+            logger.info(f"Skipping steps: {skip_steps}")
+            job_id = tsdhn_queue.enqueue_job(skip_steps=skip_steps)
+        else:
+            logger.info("No steps will be skipped.")
+            job_id = tsdhn_queue.enqueue_job()
         return {
             "status": "queued",
             "job_id": job_id,

@@ -3,6 +3,7 @@
 **/__pycache__/*
 *.txt
 *.log
-.coverage
+*.json
 
+.coverage
 /jobs/
