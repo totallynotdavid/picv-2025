@@ -40,11 +40,11 @@ flowchart TB
 ## Instalación
 
 > [!WARNING]
-> Este proyecto está diseñado para entornos Linux (recomendamos **Ubuntu 20.04**). Si utilizas Windows, necesitarás configurar **Windows Subsystem for Linux** (WSL versión 2.0 o superior). Para instalar WSL, sigue la guía oficial de Microsoft: [<kbd>Instalación de WSL</kbd>](https://learn.microsoft.com/es-es/windows/wsl/install).
+> Este proyecto requiere un entorno Linux (recomendamos **Ubuntu 20.04**). Para usuarios de Windows, es necesario configurar Windows Subsystem for Linux (WSL 2.0 o superior). Consulte la [<kbd>guía oficial de Microsoft</kbd>](https://learn.microsoft.com/es-es/windows/wsl/install) para la instalación de WSL.
 
 **Prerrequisitos:**
 
-Antes de comenzar con la instalación, actualiza tu sistema:
+Antes de comenzar con la instalación de las dependencias, es importante actualizar los paquetes del sistema:
 
 ```bash
 sudo apt update -y && sudo apt upgrade -y
@@ -54,14 +54,13 @@ sudo apt update -y && sudo apt upgrade -y
 
    <table><tr><td>Opción A: Usando pyenv (recomendado)</td></tr></table>
 
-   Con pyenv podrás manejar múltiples versiones de Python de forma sencilla. Ejecuta los siguientes comandos para instalar las dependencias de pyenv para compilar versiones más modernas de Python [[1](https://stackoverflow.com/a/74314165)] y luego instalar pyenv en sí.
+   pyenv te permite instalar y usar diferentes versiones de Python en tu sistema.
 
    ```bash
-   sudo apt-get install build-essential zlib1g-dev libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev libncurses-dev tk-dev
    curl -fsSL https://pyenv.run | bash
    ```
 
-   Si estás usando WSL, añade lo siguiente a `~/.bashrc` [[2](https://stackoverflow.com/a/76483889)]:
+   **Si estás usando WSL**, ejecuta lo siguiente [[2](https://stackoverflow.com/a/76483889)]:
 
    ```bash
    echo '
@@ -70,7 +69,7 @@ sudo apt update -y && sudo apt upgrade -y
    eval "$(pyenv init -)"' >> ~/.bashrc
    ```
 
-   Si estás usando Linux de forma nativa, entonces añade como lo indican en la documentación de pyenv [[3](https://github.com/pyenv/pyenv?tab=readme-ov-file#bash)]:
+   **Si estás usando Linux de forma nativa**, ejecuta lo siguiente [[3](https://github.com/pyenv/pyenv?tab=readme-ov-file#bash)]:
 
    ```bash
    echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
@@ -78,20 +77,30 @@ sudo apt update -y && sudo apt upgrade -y
    echo 'eval "$(pyenv init - bash)"' >> ~/.bashrc
    ```
 
-   Finalmente, en cualquiera de los casos, ejecuta:
+   En cualquiera de los dos casos, aplica los cambios:
 
    ```bash
    source ~/.bashrc
-   pyenv install 3.13
    ```
 
-   <table><tr><td>Opción B: Python del sistema</td></tr></table>
-
-   Si prefieres usar la versión de Python que viene con Ubuntu es probable que solo necesites instalar pip3:
+   pyenv compila Python desde el código fuente durante la instalación. Para que esto funcione, primero debes instalar las dependencias de compilación [[1](https://stackoverflow.com/a/74314165)] [[2](https://github.com/pyenv/pyenv/wiki#suggested-build-environment)]:
 
    ```bash
-   sudo apt install -y python3-pip
+   sudo apt-get install build-essential zlib1g-dev libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev libncurses-dev tk-dev
    ```
+
+   Luego podrás instalar y usar Python:
+
+   ```bash
+   pyenv install 3.12
+   pyenv global 3.12
+   ```
+
+> [!NOTE]
+> Si prefieres utilizar la versión de Python del sistema, solo necesitas instalar pip3:
+> ```bash
+> sudo apt install -y python3-pip
+> ```
 
    En ambos casos, verifica la instalación:
 
@@ -100,7 +109,7 @@ sudo apt update -y && sudo apt upgrade -y
    pip3 -V
    ```
 
-2. **Poetry** nos ayuda a gestionar las dependencias del proyecto de forma consistente entre dispositivos.
+2. **Poetry** nos ayuda a gestionar nuestras dependencias de forma consistente entre dispositivos. Se encarga de instalar y mantener las librerías que usamos.
 
    ```bash
    curl -sSL https://install.python-poetry.org | python3 -
@@ -114,15 +123,15 @@ sudo apt update -y && sudo apt upgrade -y
    poetry --version
    ```
 
-3. **TTTAPI** (Tsunami Travel Time):
+3. **TTT SDK** (Tsunami Travel Time) es una herramienta para el cálculo y visualización del tiempo de viaje de tsunamis:
 
-   Los archivos de datos del repositorio requieren de git-lfs:
+   Necesitas git-lfs para clonar los archivos de datos grandes del repositorio:
 
    ```bash
    sudo apt install -y git-lfs
    ```
 
-   Instalación de TTTAPI:
+   Para instalar TTTAPI:
 
    ```bash
    git clone https://gitlab.com/totallynotdavid/tttapi/
@@ -137,9 +146,9 @@ sudo apt update -y && sudo apt upgrade -y
    ```
 
 > [!NOTE]
-> TTTAPI is hosted under Gitlab because the data files are big and we need to use git lfs (and it is free). The version hosted in Gitlab is just a mirror from the original authors to avoid hitting their server constantly with our CI/CD.
+> Usamos GitLab para alojar TTTAPI porque permite usar git-lfs de forma gratuita para archivos grandes. Esta versión es una copia del código original, lo que nos ayuda a no sobrecargar los servidores de los autores cuando ejecutamos nuestras pruebas automáticas.
 
-4. **TeXLive** es necesario para generar los informes en formato PDF.
+4. **TeXLive** es necesario para la generación de los informes en formato PDF.
 
    ```bash
    cd /tmp
@@ -148,7 +157,7 @@ sudo apt update -y && sudo apt upgrade -y
    cd install-tl-2*
    ```
 
-   Creación del perfil de instalación básico:
+   Creamos un perfil de instalación básico:
 
    ```bash
    cat > texlive.profile << EOF
@@ -159,7 +168,7 @@ sudo apt update -y && sudo apt upgrade -y
    EOF
    ```
 
-   La instalación se realiza en la carpeta del usuario para evitar problemas con los permisos y evitar el [modo usuario](https://www.tug.org/texlive/doc/tlmgr.html#USER-MODE) de texlive (no recomendado) [[4](https://tex.stackexchange.com/a/676880)]:
+   La instalación se realiza en el directorio del usuario para evitar problemas de permisos y evitar el [modo usuario](https://www.tug.org/texlive/doc/tlmgr.html#USER-MODE) de TeXLive (no recomendado) [[4](https://tex.stackexchange.com/a/676880)]:
 
    ```bash
    perl ./install-tl --profile=texlive.profile \
@@ -175,20 +184,20 @@ sudo apt update -y && sudo apt upgrade -y
    source ~/.bashrc
    ```
 
-   Finalmente, es necesario instalar algunos paquetes de LaTeX con tlmgr para que funcione con nuestra configuración actual:
+   Instalación de paquetes LaTeX necesarios:
 
    ```bash
    tlmgr update --self
    tlmgr install babel-spanish hyphen-spanish booktabs
    ```
 
-5. Dependencias adicionales: `gfortran 11.4.0`, `redis-server`, `gmt`, `ps2eps`, `cmake` (ttt_client), `perl` (para TeXLive), `wget`
+5. Dependencias adicionales: `cmake` (ttt_client) `gfortran 11.4.0`, `redis-server`, `gmt`, `ps2eps`
 
    ```bash
-   sudo apt install -y gfortran redis-server ps2eps gmt gmt-dcw gmt-gshhg
+   sudo apt install -y cmake gfortran redis-server gmt gmt-dcw gmt-gshhg ps2eps
    ```
 
-   Configura Redis para que sea gestionado por systemd (en Ubuntu):
+   Configura Redis para ser gestionado por systemd:
 
    ```bash
    sudo sed -i 's/^# \?supervised \(no\|auto\)/supervised systemd/' /etc/redis/redis.conf
@@ -224,13 +233,19 @@ sudo apt update -y && sudo apt upgrade -y
 
    ```bash
    poetry run start
-   rq worker tsdhn_queue
    ```
-
-   Es importante que ejecutes `rq worker tsdhn_queue` en el entorno de Poetry o rq no se encontrará.
 
 > [!NOTE]
 > La API estará disponible en `http://localhost:8000`
+
+   En un terminal diferente, ejecuta el siguiente comando para iniciar el servidor de Redis:
+
+   ```bash
+   eval $(poetry env activate)
+   rq worker tsdhn_queue
+   ```
+
+   Asegúrate de ejecutar `rq worker tsdhn_queue` dentro del entorno de Poetry para garantizar el acceso a todas las dependencias necesarias.
 
 ## Estructura del proyecto
 
