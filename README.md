@@ -50,17 +50,13 @@ Antes de comenzar con la instalación de las dependencias, es importante actuali
 sudo apt update -y && sudo apt upgrade -y
 ```
 
-1. **Python**:
-
-   <table><tr><td>Opción A: Usando pyenv (recomendado)</td></tr></table>
-
-   pyenv te permite instalar y usar diferentes versiones de Python en tu sistema.
+1. **Python** (con [pyenv](https://github.com/pyenv/pyenv)): Usamos pyenv porque nos permite instalar y usar diferentes versiones de Python a la vez.
 
    ```bash
    curl -fsSL https://pyenv.run | bash
    ```
 
-   **Si estás usando WSL**, ejecuta lo siguiente [[2](https://stackoverflow.com/a/76483889)]:
+   **Si estás usando WSL**, ejecuta lo siguiente [[1](https://stackoverflow.com/a/76483889)]:
 
    ```bash
    echo '
@@ -69,7 +65,7 @@ sudo apt update -y && sudo apt upgrade -y
    eval "$(pyenv init -)"' >> ~/.bashrc
    ```
 
-   **Si estás usando Linux de forma nativa**, ejecuta lo siguiente [[3](https://github.com/pyenv/pyenv?tab=readme-ov-file#bash)]:
+   **Si estás usando Linux de forma nativa**, ejecuta lo siguiente [[2](https://github.com/pyenv/pyenv?tab=readme-ov-file#bash)]:
 
    ```bash
    echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
@@ -83,7 +79,7 @@ sudo apt update -y && sudo apt upgrade -y
    source ~/.bashrc
    ```
 
-   pyenv compila Python desde el código fuente durante la instalación. Para que esto funcione, primero debes instalar las dependencias de compilación [[1](https://stackoverflow.com/a/74314165)] [[2](https://github.com/pyenv/pyenv/wiki#suggested-build-environment)]:
+   pyenv compila Python desde el código fuente durante la instalación. Para que esto funcione, primero debes instalar las dependencias de compilación [[3](https://stackoverflow.com/a/74314165)] [[4](https://github.com/pyenv/pyenv/wiki#suggested-build-environment)]:
 
    ```bash
    sudo apt-get install build-essential zlib1g-dev libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev libncurses-dev tk-dev
@@ -96,11 +92,10 @@ sudo apt update -y && sudo apt upgrade -y
    pyenv global 3.12
    ```
 
-> [!NOTE]
-> Si prefieres utilizar la versión de Python del sistema, solo necesitas instalar pip3:
-> ```bash
-> sudo apt install -y python3-pip
-> ```
+   Si prefieres utilizar la versión de Python del sistema, solo necesitas instalar pip3:
+   ```bash
+   sudo apt install -y python3-pip
+   ```
 
    En ambos casos, verifica la instalación:
 
@@ -168,7 +163,7 @@ sudo apt update -y && sudo apt upgrade -y
    EOF
    ```
 
-   La instalación se realiza en el directorio del usuario para evitar problemas de permisos y evitar el [modo usuario](https://www.tug.org/texlive/doc/tlmgr.html#USER-MODE) de TeXLive (no recomendado) [[4](https://tex.stackexchange.com/a/676880)]:
+   La instalación se realiza en el directorio del usuario para evitar problemas de permisos y evitar el [modo usuario](https://www.tug.org/texlive/doc/tlmgr.html#USER-MODE) de TeXLive (no recomendado) [[5](https://tex.stackexchange.com/a/676880)]:
 
    ```bash
    perl ./install-tl --profile=texlive.profile \
