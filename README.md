@@ -93,6 +93,7 @@ sudo apt update -y && sudo apt upgrade -y
    ```
 
    Si prefieres utilizar la versión de Python del sistema, solo necesitas instalar pip3:
+
    ```bash
    sudo apt install -y python3-pip
    ```
@@ -230,8 +231,7 @@ sudo apt update -y && sudo apt upgrade -y
    poetry run start
    ```
 
-> [!NOTE]
-> La API estará disponible en `http://localhost:8000`
+   La API estará disponible en `http://localhost:8000`
 
    En un terminal diferente, ejecuta el siguiente comando para iniciar el servidor de Redis:
 
