@@ -286,23 +286,89 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
 
    ```json
    {
-     "length": 120.5,
-     "width": 80.3,
-     "dislocation": 2.5,
-     "seismic_moment": 3.2e20,
-     "tsunami_warning": "Alerta de tsunami para costas cercanas",
-     "distance_to_coast": 45.2,
-     "azimuth": 18.5,
-     "dip": 30.0,
-     "epicenter_location": "mar"
+     "length": 575.44,
+     "width": 144.54,
+     "dislocation": 10.64,
+     "seismic_moment": 3.98e22,
+     "tsunami_warning": "Genera un Tsunami grande y destructivo",
+     "distance_to_coast": 10439.47,
+     "azimuth": 247.0,
+     "dip": 18.0,
+     "epicenter_location": "mar",
+
+     "rectangle_parameters": {
+       "L1": 575439.94,
+       "W1": 137469.49,
+       "beta": 13.44,
+       "alfa": -23.0,
+       "h1": 591632.47,
+       "a1": -49.15,
+       "b1": 291.7,
+       "xo": -153.35,
+       "yo": 56.45
+     },
+
+     "rectangle_corners": [
+       { "lon": -153.35, "lat": 56.45 },
+       { "lon": -158.11, "lat": 54.42 },
+       { "lon": -158.6, "lat": 55.56 },
+       { "lon": -153.83, "lat": 57.58 },
+       { "lon": -153.35, "lat": 56.45 }
+     ]
    }
    ```
 
-2. [`/tsunami-travel-times`](orchestrator/main.py?plain=1#L45) utiliza los mismos datos de entrada y realiza una serie de integraciones vectorizadas para calcular los tiempos de arribo a puertos predefinidos ([`puertos.txt`](/model/puertos.txt)). La respuesta es un objeto JSON que incluye tanto los tiempos de arribo como las distancias a cada estación.
-3. [`/run-tsdhn`](orchestrator/main.py?plain=1#L61) llama al script [`job.run`](model/job.run), que procesa [`hypo.dat`](model/hypo.dat) y genera resultados en ~12 minutos (en un procesador de 8 núcleos). Produce:
+2. [`/tsunami-travel-times`](orchestrator/main.py?plain=1#L45) utiliza los mismos datos de entrada que `calculate` y realiza una serie de integraciones vectorizadas para calcular los tiempos de arribo a puertos predefinidos ([`puertos.txt`](/model/puertos.txt)). La respuesta es un objeto JSON que incluye tanto los tiempos de arribo como las distancias a cada estación.
+
+   Ejemplo de respuesta esperada:
+
+   ```json
+   {
+     "arrival_times": {
+       "-80.5876  -03.": "12:09 23Feb",
+       "-81.2827  -04.": "12:12 23Feb",
+       "__comment": "Otros puertos omitidos por brevedad",
+       "-70.3232  -18.": "14:40 23Feb"
+     },
+
+     "distances": {
+       "-80.5876  -03.": 9445.79,
+       "-81.2827  -04.": 9491.94,
+       "__comment": "Otros puertos omitidos por brevedad",
+       "-70.3232  -18.": 11438.3
+     },
+
+     "epicenter_info": {
+       "date": "23",
+       "time": "0000",
+       "latitude": "56.00",
+       "longitude": "-156.00",
+       "depth": "12",
+       "magnitude": "9.0"
+     }
+   }
+   ```
+
+3. [`/run-tsdhn`](orchestrator/main.py?plain=1#L61) llama al script [`job.run`](model/job.run), que procesa [`hypo.dat`](model/hypo.dat) y genera resultados en 25 a 50 minutos (dependiendo de la capacidad del CPU). Produce:
 
    - [`salida.txt`](model/salida.txt): Tiempos de arribo brutos.
    - [`reporte.pdf`](model/reporte.pdf): Mapas de altura de olas, mareógrafos y parámetros técnicos.
+
+   Ejemplo de respuesta esperada:
+
+   ```json
+   {
+     "status": "queued",
+     "job_id": "dee661ec-1c39-47e5-bb50-3926fa70bb8e",
+     "message": "TSDHN job has been queued successfully"
+   }
+   ```
+
+   donde:
+
+   - `status` indica el estado de la tarea. Puede ser `queued`, `started`, `completed` o `failed`.
+   - `job_id` es el identificador único de la tarea.
+   - `message` proporciona información adicional sobre el estado de la tarea.
 
 > [!WARNING]
 > Los endpoints deben invocarse en orden estricto: `/calculate` :arrow_right: `/tsunami-travel-times` :arrow_right: `/run-tsdhn`, ya que cada uno depende del resultado del anterior.
