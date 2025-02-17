@@ -85,11 +85,11 @@ sudo apt update -y && sudo apt upgrade -y
    pyenv compila Python a partir del código fuente durante la instalación, por lo que resulta necesario instalar previamente las dependencias de compilación [[3](https://stackoverflow.com/a/74314165)] [[4](https://github.com/pyenv/pyenv/wiki#suggested-build-environment)] y, luego, instala Python:
 
    ```bash
-   sudo apt-get install build-essential zlib1g-dev libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev libncurses-dev tk-dev
+   sudo apt install -y build-essential zlib1g-dev libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev libncurses-dev tk-dev
    pyenv install 3.12 && pyenv global 3.12
    ```
 
-   Para usar Python del sistema en lugar de `pyenv`, solo necesitas instalar pip3:
+   Si deseas usar Python del sistema en lugar de `pyenv`, solo necesitas instalar `pip3`:
 
    ```bash
    sudo apt install -y python3-pip
@@ -116,9 +116,7 @@ sudo apt update -y && sudo apt upgrade -y
    poetry --version
    ```
 
-3. El software [**TTT SDK**](https://www.geoware-online.com/tsunami.html) (Tsunami Travel Time) calcula tiempos de arribo de un tsunami a partir de la batimetría de una cuadrícula geográfica (el océano Pacífico en nuestro caso).
-
-   Necesitas `git-lfs` para clonar los archivos de datos grandes del repositorio y `cmake` para compilar e instalar el software:
+3. El software [**TTT SDK**](https://www.geoware-online.com/tsunami.html) (Tsunami Travel Time) calcula los tiempos de arribo de un tsunami a partir de la batimetría de una cuadrícula geográfica (el océano Pacífico en nuestro caso). Para instalarlo, necesitas `git-lfs` para clonar los archivos de datos grandes del repositorio y `cmake` para compilar e instalar el software:
 
    ```bash
    sudo apt install -y git-lfs cmake
@@ -135,7 +133,7 @@ sudo apt update -y && sudo apt upgrade -y
 > [!NOTE]
 > El SDK usa GitLab para aprovechar su política de LFS gratuito y reducir la carga en los servidores de los autores durante pruebas CI/CD.
 
-4. **TeXLive** es necesario para la generación de los informes. Para simplificar el proceso, se opta por una instalación mínima. Ejecute:
+4. **TeXLive** es utilizado para la generación de los informes. Para simplificar el proceso, se opta por una instalación mínima. Ejecute:
 
    ```bash
    cd /tmp
@@ -144,7 +142,7 @@ sudo apt update -y && sudo apt upgrade -y
    cd install-tl-2*
    ```
 
-   Crea uun perfil de instalación denominado <kbd>texlive.profile</kbd> con el siguiente contenido:
+   Crea un perfil de instalación denominado <kbd>texlive.profile</kbd> con el siguiente contenido:
 
    ```bash
    cat > texlive.profile << EOF
@@ -155,7 +153,7 @@ sudo apt update -y && sudo apt upgrade -y
    EOF
    ```
 
-   La instalación se realiza en el directorio del usuario para evitar problemas relacionados a permisos y evitar el [modo usuario](https://www.tug.org/texlive/doc/tlmgr.html#USER-MODE) de TeXLive (no recomendado) [[5](https://tex.stackexchange.com/a/676880)]:
+   La instalación se realiza en el directorio del usuario para evitar problemas relacionados a permisos y evitar el [modo usuario](https://www.tug.org/texlive/doc/tlmgr.html#USER-MODE) de TeXLive [[5](https://tex.stackexchange.com/a/676880)]:
 
    ```bash
    perl ./install-tl --profile=texlive.profile \
@@ -214,7 +212,7 @@ sudo apt update -y && sudo apt upgrade -y
    poetry run start
    ```
 
-   La API estará disponible en `http://localhost:8000`
+   La API estará disponible en `http://localhost:8000`.
 
    En un terminal diferente, ejecuta el siguiente comando para iniciar el worker RQ:
 
