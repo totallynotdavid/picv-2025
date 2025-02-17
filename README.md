@@ -250,27 +250,27 @@ picv-2025/
 ## Endpoints de la API
 
 > [!WARNING]
-> El modelo solo procesa magnitudes entre Mw 6.5 y Mw 9.5. Valores fuera de este rango resultarán en un error.
+> El modelo solo procesa magnitudes entre **Mw 6.5 y Mw 9.5**. Valores fuera de este rango resultarán en un error. Los siguientes endpoints deben invocarse en **orden secuencial estricto**:  
+> `/calculate` → `/tsunami-travel-times` → `/run-tsdhn`.
 
-El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz web](https://github.com/totallynotdavid/picv-2025-web). La API gestiona los siguientes endpoints:
+El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz web](https://github.com/totallynotdavid/picv-2025-web).
 
-1. [`/calculate`](orchestrator/main.py?plain=1#L27) recibe los valores para la magnitud (Mw), profundidad (h) y coordenadas del epicentro. Luego, calcula la geometría de la ruptura, el momento sísmico y evalúa el riesgo de tsunami. Genera el archivo [`hypo.dat`](model/hypo.dat) que se usará en la simulación.
+1. [`/calculate`](orchestrator/main.py?plain=1#L27) recibe los valores para la magnitud (Mw), profundidad (h) y coordenadas del epicentro. Luego, calcula la geometría de la ruptura, el momento sísmico y evalúa el riesgo de tsunami. Genera el archivo [`hypo.dat`](model/hypo.dat) requerido en pasos posteriores.
 
    Los siguientes campos deben enviarse en el cuerpo de la solicitud en formato JSON:
 
-   | Parámetro | Descripción                | Unidad         |
-   | --------- | -------------------------- | -------------- |
-   | `Mw`      | Magnitud momento sísmico   | Adimensional   |
-   | `h`       | Profundidad del hipocentro | km             |
-   | `lat0`    | Latitud del epicentro      | grados         |
-   | `lon0`    | Longitud del epicentro     | grados         |
-   | `dia`     | Día del mes del evento     | string         |
-   | `hhmm`    | Hora y minutos del evento  | formato `HHMM` |
+   | Parámetro | Descripción                | Unidad              |
+   | --------- | -------------------------- | ------------------- |
+   | `Mw`      | Magnitud momento sísmico   | adimensional        |
+   | `h`       | Profundidad del hipocentro | km                  |
+   | `lat0`    | Latitud del epicentro      | grados              |
+   | `lon0`    | Longitud del epicentro     | grados              |
+   | `dia`     | Día del mes del evento     | string (ej. `"15"`) |
+   | `hhmm`    | Hora y minutos del evento  | formato `HHMM`      |
 
    Ten en cuenta que los modelos Pydantic (definidos en [`schemas.py`](orchestrator/models/schemas.py)) se encargan de validar y, en algunos casos, transformar estos parámetros para asegurar que el formato sea el correcto.
-
-   Un ejemplo de solicitud (`POST`):
-
+   <details>
+   <summary>Ejemplo de solicitud</summary>
    ```json
    {
      "Mw": 7.5,
@@ -281,9 +281,10 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
      "hhmm": "1430"
    }
    ```
+   </details>
 
-   Respuesta esperada:
-
+   <details>
+   <summary>Respuesta esperada</summary>
    ```json
    {
      "length": 575.44,
@@ -295,7 +296,6 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
      "azimuth": 247.0,
      "dip": 18.0,
      "epicenter_location": "mar",
-
      "rectangle_parameters": {
        "L1": 575439.94,
        "W1": 137469.49,
@@ -307,7 +307,6 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
        "xo": -153.35,
        "yo": 56.45
      },
-
      "rectangle_corners": [
        { "lon": -153.35, "lat": 56.45 },
        { "lon": -158.11, "lat": 54.42 },
@@ -317,6 +316,7 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
      ]
    }
    ```
+   </details>
 
 2. [`/tsunami-travel-times`](orchestrator/main.py?plain=1#L45) utiliza los mismos datos de entrada que `calculate` y realiza una serie de integraciones vectorizadas para calcular los tiempos de arribo a puertos predefinidos ([`puertos.txt`](/model/puertos.txt)). La respuesta es un objeto JSON que incluye tanto los tiempos de arribo como las distancias a cada estación.
 
