@@ -247,7 +247,7 @@ picv-2025/
     └── salida.txt                # Archivo de salida con datos del epicentro y tiempos de arribo.
 ```
 
-## Flujo de procesamiento
+## Endpoints de la API
 
 > [!WARNING]
 > El modelo solo procesa magnitudes entre Mw 6.5 y Mw 9.5. Valores fuera de este rango resultarán en un error.
@@ -366,12 +366,51 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
 
    donde:
 
-   - `status` indica el estado de la tarea. Puede ser `queued`, `started`, `completed` o `failed`.
+   - `status` indica el estado de la tarea. Puede ser `queued`, `running`, `completed` o `failed`.
    - `job_id` es el identificador único de la tarea.
    - `message` proporciona información adicional sobre el estado de la tarea.
 
 > [!WARNING]
 > Los endpoints deben invocarse en orden estricto: `/calculate` :arrow_right: `/tsunami-travel-times` :arrow_right: `/run-tsdhn`, ya que cada uno depende del resultado del anterior.
+
+4. [`/job-status/`](orchestrator/main.py?plain=1#L134) retorna el ESTADO actual de una tarea en la cola de RQ. Se espera un objeto JSON con el ID de la tarea:
+
+   Ejemplo de solicitud (`POST`):
+
+   ```json
+   {
+     "job_id": "dee661ec-1c39-47e5-bb50-3926fa70bb8e"
+   }
+   ```
+
+   Ejemplo de respuesta esperada:
+
+   ```json
+   {
+     "status": "completed",
+     "details": "Generating final report",
+     "error": null,
+     "created_at": "2025-02-17T19:46:08.171522",
+     "started_at": "2025-02-17T19:46:08.345851",
+     "ended_at": "2025-02-17T20:27:44.304036",
+     "report_path": "/jobs/dee661ec-1c39-47e5-bb50-3926fa70bb8e/reporte.pdf"
+   }
+   ```
+
+5. [`/job-result/`](orchestrator/main.py?plain=1#L163) retorna el informe generado. Se espera un objeto JSON con el ID de la tarea: `localhost:8000/job-result/dee661ec-1c39-47e5-bb50-3926fa70bb8e`
+
+6. [`/health`](orchestrator/main.py?plain=1#L204) verifica la disponibilidad de la API.
+
+   Ejemplo de respuesta esperada:
+
+   ```json
+   {
+     "status": "healthy",
+     "timestamp": "2025-02-17T16:22:45.133492",
+     "calculator": "initialized",
+     "queue": "connected"
+   }
+   ```
 
 ## Pruebas personalizadas
 
