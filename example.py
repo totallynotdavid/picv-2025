@@ -36,8 +36,9 @@ def imprimir_advertencia(mensaje):
     print(f"{Fore.YELLOW}{Style.BRIGHT}⚠️ {mensaje}{Style.RESET_ALL}")
 
 
-def imprimir_info(mensaje):
-    print(f"{Fore.BLUE}{Style.BRIGHT}ℹ️ {mensaje}{Style.RESET_ALL}")
+def imprimir_info(*mensajes):
+    for mensaje in mensajes:
+        print(f"{Fore.BLUE}{Style.BRIGHT}🔔 {mensaje}{Style.RESET_ALL}")
 
 
 def imprimir_paso(numero, descripcion):
