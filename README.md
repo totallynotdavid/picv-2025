@@ -40,17 +40,17 @@ flowchart TB
 ## Instalación
 
 > [!WARNING]
-> Este proyecto requiere un entorno Linux (recomendamos **Ubuntu 20.04**). Para usuarios de Windows, es necesario configurar Windows Subsystem for Linux (WSL 2.0 o superior). Consulte la [<kbd>guía oficial de Microsoft</kbd>](https://learn.microsoft.com/es-es/windows/wsl/install) para la instalación de WSL.
+> El proyecto requiere **Ubuntu 20.04** o superior. Usuarios de Windows deben configurar Windows Subsystem for Linux (WSL 2.0 o superior) siguiendo la [<kbd>guía oficial</kbd>](https://learn.microsoft.com/es-es/windows/wsl/install) de Microsoft antes de continuar.
 
 **Prerrequisitos:**
 
-Antes de comenzar con la instalación de las dependencias, es importante actualizar los paquetes del sistema:
+Actualice los paquetes del sistema antes de iniciar:
 
 ```bash
 sudo apt update -y && sudo apt upgrade -y
 ```
 
-1. **Python** (con [pyenv](https://github.com/pyenv/pyenv)): Usamos pyenv porque nos permite instalar y usar diferentes versiones de Python a la vez.
+1. **Python** (con [pyenv](https://github.com/pyenv/pyenv)): Usamos pyenv porque nos permite gestionar múltiples versiones de Python. Ejecute:
 
    ```bash
    curl -fsSL https://pyenv.run | bash
@@ -59,40 +59,37 @@ sudo apt update -y && sudo apt upgrade -y
    <ins>Si estás usando WSL</ins>, ejecuta lo siguiente [[1](https://stackoverflow.com/a/76483889)]:
 
    ```bash
-   echo '
+   cat << 'EOF' >> ~/.bashrc
    export PYENV_ROOT="$HOME/.pyenv"
    export PATH="$PYENV_ROOT/bin:$PATH"
-   eval "$(pyenv init -)"' >> ~/.bashrc
+   eval "$(pyenv init -)"
+   EOF
    ```
 
-   <ins>Si estás usando Linux de forma nativa</ins>, ejecuta lo siguiente [[2](https://github.com/pyenv/pyenv?tab=readme-ov-file#bash)]:
+   <ins>Si estás usando Ubuntu de forma nativa</ins>, ejecuta lo siguiente [[2](https://github.com/pyenv/pyenv?tab=readme-ov-file#bash)]:
 
    ```bash
-   echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
-   echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
-   echo 'eval "$(pyenv init - bash)"' >> ~/.bashrc
+   cat << 'EOF' >> ~/.bashrc
+   export PYENV_ROOT="$HOME/.pyenv"
+   [[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+   eval "$(pyenv init - bash)"
+   EOF
    ```
 
-   En cualquiera de los dos casos, aplica los cambios:
+   En cualquiera de los dos casos, aplica los cambios con:
 
    ```bash
    source ~/.bashrc
    ```
 
-   pyenv compila Python desde el código fuente durante la instalación. Para que esto funcione, primero debes instalar las dependencias de compilación [[3](https://stackoverflow.com/a/74314165)] [[4](https://github.com/pyenv/pyenv/wiki#suggested-build-environment)]:
+   pyenv compila Python a partir del código fuente durante la instalación, por lo que resulta necesario instalar previamente las dependencias de compilación [[3](https://stackoverflow.com/a/74314165)] [[4](https://github.com/pyenv/pyenv/wiki#suggested-build-environment)] y, luego, instala Python:
 
    ```bash
    sudo apt-get install build-essential zlib1g-dev libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev libncurses-dev tk-dev
+   pyenv install 3.12 && pyenv global 3.12
    ```
 
-   Luego podrás instalar y usar Python:
-
-   ```bash
-   pyenv install 3.12
-   pyenv global 3.12
-   ```
-
-   Si prefieres utilizar la versión de Python del sistema, solo necesitas instalar pip3:
+   Para usar Python del sistema en lugar de `pyenv`, solo necesitas instalar pip3:
 
    ```bash
    sudo apt install -y python3-pip
@@ -119,9 +116,9 @@ sudo apt update -y && sudo apt upgrade -y
    poetry --version
    ```
 
-3. El software [**TTT SDK**](https://www.geoware-online.com/tsunami.html) (Tsunami Travel Time) calcula tiempos de arribo de un tsunami a partir de la batimetría de una cuadrícula geográfica.
+3. El software [**TTT SDK**](https://www.geoware-online.com/tsunami.html) (Tsunami Travel Time) calcula tiempos de arribo de un tsunami a partir de la batimetría de una cuadrícula geográfica (el océano Pacífico en nuestro caso).
 
-   Primero, necesitas `git-lfs` para clonar los archivos de datos grandes del repositorio y `cmake` para compilar e instalar el software:
+   Necesitas `git-lfs` para clonar los archivos de datos grandes del repositorio y `cmake` para compilar e instalar el software:
 
    ```bash
    sudo apt install -y git-lfs cmake
@@ -131,20 +128,14 @@ sudo apt update -y && sudo apt upgrade -y
 
    ```bash
    git clone https://gitlab.com/totallynotdavid/tttapi/
-   cd tttapi
-   make config
-   make compile
-   sudo make install
-   sudo make datadir
-   sudo make docs
-   make test
-   make clean
+   cd tttapi && make config compile && sudo make install datadir docs
+   make test clean
    ```
 
 > [!NOTE]
-> TTT SDK está alojado en GitLab porque ofrece un mejor plan gratuito para archivos grandes (git-lfs) y evita sobrecargar los servidores originales durante nuestras pruebas de CI/CD.
+> El SDK usa GitLab para aprovechar su política de LFS gratuito y reducir la carga en los servidores de los autores durante pruebas CI/CD.
 
-4. **TeXLive** es necesario para la generación de los informes en formato PDF. Esta guía usa una instalación mínima para simplificar el proceso.
+4. **TeXLive** es necesario para la generación de los informes. Para simplificar el proceso, se opta por una instalación mínima. Ejecute:
 
    ```bash
    cd /tmp
@@ -153,7 +144,7 @@ sudo apt update -y && sudo apt upgrade -y
    cd install-tl-2*
    ```
 
-   Creamos un perfil de instalación con `scheme-basic`:
+   Crea uun perfil de instalación denominado <kbd>texlive.profile</kbd> con el siguiente contenido:
 
    ```bash
    cat > texlive.profile << EOF
@@ -164,7 +155,7 @@ sudo apt update -y && sudo apt upgrade -y
    EOF
    ```
 
-   La instalación se realiza en el directorio del usuario para evitar problemas de permisos y evitar el [modo usuario](https://www.tug.org/texlive/doc/tlmgr.html#USER-MODE) de TeXLive (no recomendado) [[5](https://tex.stackexchange.com/a/676880)]:
+   La instalación se realiza en el directorio del usuario para evitar problemas relacionados a permisos y evitar el [modo usuario](https://www.tug.org/texlive/doc/tlmgr.html#USER-MODE) de TeXLive (no recomendado) [[5](https://tex.stackexchange.com/a/676880)]:
 
    ```bash
    perl ./install-tl --profile=texlive.profile \
@@ -173,7 +164,7 @@ sudo apt update -y && sudo apt upgrade -y
                      --no-interaction
    ```
 
-   Configuración del PATH:
+   Configuración del <kbd>PATH</kbd>:
 
    ```bash
    echo -e '\nexport PATH="$HOME/texlive/bin/x86_64-linux:$PATH"' >> ~/.bashrc
@@ -183,11 +174,10 @@ sudo apt update -y && sudo apt upgrade -y
    Instalación de paquetes LaTeX necesarios:
 
    ```bash
-   tlmgr update --self
-   tlmgr install babel-spanish hyphen-spanish booktabs
+   tlmgr update --self && tlmgr install babel-spanish hyphen-spanish booktabs
    ```
 
-5. Dependencias adicionales: `gfortran 11.4.0`, `redis-server`, `gmt`, `ps2eps`
+5. Dependencias adicionales: `gfortran`, `redis-server`, `gmt`, `ps2eps`. Ejecute:
 
    ```bash
    sudo apt install -y gfortran redis-server gmt gmt-dcw gmt-gshhg ps2eps
@@ -204,28 +194,21 @@ sudo apt update -y && sudo apt upgrade -y
 
 **Pasos de instalación:**
 
-1. Clona el repositorio:
+1. Clona el repositorio e instala las dependencias:
 
    ```bash
    git clone https://github.com/totallynotdavid/picv-2025
-   cd picv-2025
-   ```
-
-2. Instala las dependencias con Poetry:
-
-   ```bash
-   poetry install
+   cd picv-2025 && poetry install
    poetry self add 'poethepoet[poetry_plugin]'
-   eval $(poetry env activate)
    ```
 
-3. Verifica la instalación:
+2. Valide la instalación con:
 
    ```bash
-   poetry run pytest
+   poetry run pytest # Todos los tests deben pasar
    ```
 
-4. Inicia la API:
+3. Para iniciar la API:
 
    ```bash
    poetry run start
@@ -233,11 +216,10 @@ sudo apt update -y && sudo apt upgrade -y
 
    La API estará disponible en `http://localhost:8000`
 
-   En un terminal diferente, ejecuta el siguiente comando para iniciar el servidor de Redis:
+   En un terminal diferente, ejecuta el siguiente comando para iniciar el worker RQ:
 
    ```bash
-   eval $(poetry env activate)
-   rq worker tsdhn_queue
+   poetry run rq worker tsdhn_queue
    ```
 
    Asegúrate de ejecutar `rq worker tsdhn_queue` dentro del entorno de Poetry para garantizar el acceso a todas las dependencias necesarias.
