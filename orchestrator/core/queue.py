@@ -40,25 +40,21 @@ class ProcessingStep:
     extra_executables: List[str] = field(default_factory=list)
 
     def get_command_path(self, working_dir: Path) -> Path:
-        """Get full path to the main command executable"""
         return working_dir / self.command[0]
 
     def handle_compilation(self, working_dir: Path) -> None:
-        """Handle compilation steps if configured"""
         if self.compiler_config:
             compile_fortran(working_dir, self.compiler_config)
             output_path = working_dir / self.compiler_config.output
             make_executable(output_path)
 
     def validate_pre_execute(self, working_dir: Path) -> None:
-        """Validate and prepare pre-execution requirements"""
         if self.pre_execute_checks:
             validate_files(working_dir, self.pre_execute_checks)
             for filename, _ in self.pre_execute_checks:
                 make_executable(working_dir / filename)
 
     def prepare_executables(self, working_dir: Path) -> None:
-        """Prepare extra required executables"""
         for exe in self.extra_executables:
             exe_path = working_dir / exe
             if exe_path.exists():
@@ -118,7 +114,6 @@ TTT_MUNDO_STEPS = [
 
 
 def make_executable(file_path: Path) -> None:
-    """Make a file executable with proper error handling"""
     try:
         current_mode = file_path.stat().st_mode
         file_path.chmod(current_mode | 0o111)
@@ -128,7 +123,6 @@ def make_executable(file_path: Path) -> None:
 
 
 def compile_fortran(source_dir: Path, config: CompilerConfig) -> None:
-    """Compile Fortran source with proper flags"""
     args = [
         config.compiler,
         *config.flags,
@@ -186,7 +180,6 @@ def check_dependencies() -> None:
 
 
 def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
-    """Main job execution handler with isolation and status tracking"""
     job = get_current_job()
     try:
         # Setup job context
@@ -294,8 +287,6 @@ def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
 
 
 class TSDHNJob:
-    """Main job handler class with Redis integration"""
-
     def __init__(self, redis_host="localhost", redis_port=6379, redis_db=0):
         self.redis = Redis(
             host=redis_host,
@@ -307,7 +298,6 @@ class TSDHNJob:
         self.queue = Queue("tsdhn_queue", connection=self.redis)
 
     def enqueue_job(self, skip_steps: List[str] = None) -> str:
-        """Enqueue a new TSDHN job with validation"""
         try:
             # Validate steps before queuing
             all_steps = [step.name for step in PROCESSING_PIPELINE + TTT_MUNDO_STEPS]
@@ -333,12 +323,10 @@ class TSDHNJob:
             raise RuntimeError(f"Job submission failed: {str(e)}") from e
 
     def get_job_status(self, job_id: str) -> Dict:
-        """Get comprehensive job status information"""
         try:
             job = Job.fetch(job_id, connection=self.redis)
             status = job.get_status()
 
-            # Map RQ statuses to our JobStatus enum
             status_map = {
                 "queued": JobStatus.QUEUED.value,
                 "started": JobStatus.RUNNING.value,
