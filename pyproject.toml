@@ -35,6 +35,7 @@ pytest-cov = "^4.1.0"
 [tool.poetry.group.dev.dependencies]
 aiohttp = "^3.11.12"
 ruff = "^0.9.6"
+colorama = "^0.4.6"
 
 [tool.pytest.ini_options]
 log_cli = false
