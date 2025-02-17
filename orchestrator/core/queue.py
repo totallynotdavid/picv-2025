@@ -1,12 +1,15 @@
 import logging
+import shutil
 import subprocess
 import uuid
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from redis import Redis
-from rq import Queue
+from redis.exceptions import ConnectionError
+from rq import Queue, get_current_job
 from rq.job import Job
 
 logger = logging.getLogger(__name__)
@@ -19,36 +22,49 @@ class JobStatus(Enum):
     FAILED = "failed"
 
 
+@dataclass(frozen=True)
 class CompilerConfig:
-    def __init__(
-        self,
-        source: str,
-        output: str,
-        compiler: str = "gfortran",
-        flags: List[str] = None,
-    ):
-        self.source = source
-        self.output = output
-        self.compiler = compiler
-        self.flags = flags or []
+    source: str
+    output: str
+    compiler: str = "gfortran"
+    flags: List[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
 class ProcessingStep:
-    def __init__(
-        self,
-        name: str,
-        command: List[str],
-        file_checks: List[Tuple[str, str]],
-        compiler_config: Optional[CompilerConfig] = None,
-        pre_execute_checks: List[Tuple[str, str]] = None,
-        extra_executables: List[str] = None,
-    ):
-        self.name = name
-        self.command = command
-        self.file_checks = file_checks
-        self.compiler_config = compiler_config
-        self.pre_execute_checks = pre_execute_checks or []
-        self.extra_executables = extra_executables or []
+    name: str
+    command: List[str]
+    file_checks: List[Tuple[str, str]]
+    compiler_config: Optional[CompilerConfig] = None
+    pre_execute_checks: List[Tuple[str, str]] = field(default_factory=list)
+    extra_executables: List[str] = field(default_factory=list)
+
+    def get_command_path(self, working_dir: Path) -> Path:
+        """Get full path to the main command executable"""
+        return working_dir / self.command[0]
+
+    def handle_compilation(self, working_dir: Path) -> None:
+        """Handle compilation steps if configured"""
+        if self.compiler_config:
+            compile_fortran(working_dir, self.compiler_config)
+            output_path = working_dir / self.compiler_config.output
+            make_executable(output_path)
+
+    def validate_pre_execute(self, working_dir: Path) -> None:
+        """Validate and prepare pre-execution requirements"""
+        if self.pre_execute_checks:
+            validate_files(working_dir, self.pre_execute_checks)
+            for filename, _ in self.pre_execute_checks:
+                make_executable(working_dir / filename)
+
+    def prepare_executables(self, working_dir: Path) -> None:
+        """Prepare extra required executables"""
+        for exe in self.extra_executables:
+            exe_path = working_dir / exe
+            if exe_path.exists():
+                make_executable(exe_path)
+            else:
+                raise FileNotFoundError(f"Extra executable {exe_path} not found")
 
 
 PROCESSING_PIPELINE = [
@@ -104,8 +120,9 @@ TTT_MUNDO_STEPS = [
 def make_executable(file_path: Path) -> None:
     """Make a file executable with proper error handling"""
     try:
-        subprocess.run(["chmod", "775", str(file_path)], check=True)
-    except subprocess.CalledProcessError as e:
+        current_mode = file_path.stat().st_mode
+        file_path.chmod(current_mode | 0o111)
+    except (PermissionError, FileNotFoundError) as e:
         logger.error(f"Failed to make {file_path} executable: {e}")
         raise
 
@@ -119,97 +136,161 @@ def compile_fortran(source_dir: Path, config: CompilerConfig) -> None:
         "-o",
         config.output,
     ]
-    subprocess.run(args, cwd=source_dir, check=True)
+    try:
+        subprocess.run(args, cwd=source_dir, check=True)
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Compilation failed for {config.source}: {e}")
+        raise
 
 
 def validate_files(cwd: Path, checks: List[Tuple[str, str]]) -> None:
-    """Validate multiple file existences with custom errors"""
+    missing = []
     for filename, error_msg in checks:
         full_path = cwd / filename
         if not full_path.exists():
-            logger.error(f"{error_msg} at {full_path}")
-            raise FileNotFoundError(f"{full_path}: {error_msg}")
+            missing.append((full_path, error_msg))
+
+    if missing:
+        error_details = "\n".join([f"{path}: {msg}" for path, msg in missing])
+        logger.error(f"Missing required files:\n{error_details}")
+        raise FileNotFoundError(f"Missing files:\n{error_details}")
 
 
 def process_step(step: ProcessingStep, working_dir: Path) -> None:
-    """Process a single pipeline step"""
-    if step.compiler_config:
-        compile_fortran(working_dir, step.compiler_config)
-        make_executable(working_dir / step.compiler_config.output)
+    logger.info(f"Processing step: {step.name}")
 
-    if step.pre_execute_checks:
-        validate_files(working_dir, step.pre_execute_checks)
-        for check in step.pre_execute_checks:
-            make_executable(working_dir / check[0])
+    step.handle_compilation(working_dir)
+    step.validate_pre_execute(working_dir)
+    step.prepare_executables(working_dir)
 
-    for executable in step.extra_executables:
-        make_executable(working_dir / executable)
+    # Make main command executable
+    command_path = step.get_command_path(working_dir)
+    make_executable(command_path)
 
-    make_executable(working_dir / step.command[0])
+    # Execute the command
     subprocess.run(step.command, cwd=working_dir, check=True)
     validate_files(working_dir, step.file_checks)
 
 
+def check_dependencies() -> None:
+    required_commands = ["gfortran", "pdflatex", "csh"]
+    missing = []
+    for cmd in required_commands:
+        if not shutil.which(cmd):
+            missing.append(cmd)
+
+    if missing:
+        error_msg = f"Missing required system commands: {', '.join(missing)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+
+
 def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
+    """Main job execution handler with isolation and status tracking"""
+    job = get_current_job()
     try:
+        # Setup job context
+        if job:
+            job.meta.update(
+                {
+                    "status": JobStatus.RUNNING.value,
+                    "details": "Initializing job environment",
+                }
+            )
+            job.save_meta()
+
         logger.info(f"Starting TSDHN execution for job {job_id}")
+        check_dependencies()
 
+        # Setup isolated workspace
         repo_root = Path(__file__).resolve().parent.parent.parent
-        model_dir = repo_root / "model"
-        logger.info(f"Using model directory: {model_dir}")
+        base_model_dir = repo_root / "model"
+        job_work_dir = base_model_dir.parent / "jobs" / job_id
 
-        if not model_dir.exists():
-            raise FileNotFoundError(f"🔴 Model directory missing at {model_dir}")
+        if job_work_dir.exists():
+            shutil.rmtree(job_work_dir)
+        shutil.copytree(base_model_dir, job_work_dir)
 
-        ttt_mundo_dir = model_dir / "ttt_mundo"
+        logger.info(f"Using isolated workspace: {job_work_dir}")
         skip_steps = skip_steps or []
 
         # Validate skip_steps parameter
         all_steps = [step.name for step in PROCESSING_PIPELINE + TTT_MUNDO_STEPS]
-        invalid_steps = set(skip_steps) - set(all_steps)
-        if invalid_steps:
-            raise ValueError(f"Invalid steps to skip: {invalid_steps}")
+        if invalid := set(skip_steps) - set(all_steps):
+            raise ValueError(f"Invalid steps to skip: {invalid}")
 
-        # Main processing steps
+        # Main processing pipeline
         for step in PROCESSING_PIPELINE:
             if step.name in skip_steps:
                 logger.info(f"Skipping step: {step.name}")
                 continue
-            process_step(step, model_dir)
+
+            if job:
+                job.meta["details"] = f"Processing {step.name}"
+                job.save_meta()
+
+            process_step(step, job_work_dir)
 
         # TTT Mundo processing
+        ttt_mundo_dir = job_work_dir / "ttt_mundo"
         for step in TTT_MUNDO_STEPS:
             if step.name in skip_steps:
                 logger.info(f"Skipping step: {step.name}")
                 continue
+
+            if job:
+                job.meta["details"] = f"Processing {step.name}"
+                job.save_meta()
+
             process_step(step, ttt_mundo_dir)
 
         # Final report generation
+        if job:
+            job.meta["details"] = "Generating final report"
+            job.save_meta()
+
         report_config = CompilerConfig("reporte.f90", "reporte")
-        compile_fortran(model_dir, report_config)
-        make_executable(model_dir / "reporte")
+        compile_fortran(job_work_dir, report_config)
+        make_executable(job_work_dir / "reporte")
 
-        subprocess.run(["./reporte"], cwd=model_dir, check=True)
-        validate_files(model_dir, [("salida.txt", "Report text output missing")])
+        subprocess.run(["./reporte"], cwd=job_work_dir, check=True)
+        validate_files(job_work_dir, [("salida.txt", "Report text output missing")])
 
-        subprocess.run(["pdflatex", "reporte.tex"], cwd=model_dir, check=True)
-        validate_files(model_dir, [("reporte.pdf", "PDF report not generated")])
+        subprocess.run(["pdflatex", "reporte.tex"], cwd=job_work_dir, check=True)
+        validate_files(job_work_dir, [("reporte.pdf", "PDF report not generated")])
 
-        subprocess.run(
-            ["rm", "-f", "reporte.aux", "reporte.log"], cwd=model_dir, check=True
-        )
+        # Cleanup temporary files
+        for f in ["reporte.aux", "reporte.log"]:
+            (job_work_dir / f).unlink(missing_ok=True)
 
-        return {"status": JobStatus.COMPLETED.value, "job_id": job_id}
+        result = {
+            "status": JobStatus.COMPLETED.value,
+            "job_id": job_id,
+            "report_path": str(job_work_dir / "reporte.pdf"),
+        }
 
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed: {e.cmd}\nExit code: {e.returncode}")
-        raise RuntimeError(f"Process failed at step {e.cmd}") from e
-    except FileNotFoundError as e:
-        logger.error(f"Critical file missing: {str(e)}")
-        raise
+        if job:
+            job.meta.update(result)
+            job.meta["status"] = JobStatus.COMPLETED.value
+            job.save_meta()
+
+        return result
+
     except Exception as e:
-        logger.exception("Unhandled error in TSDHN execution")
-        raise RuntimeError("Job failed due to unexpected error") from e
+        logger.exception(f"Job {job_id} failed")
+        error_msg = f"{type(e).__name__}: {str(e)}"
+
+        if job:
+            job.meta.update(
+                {
+                    "status": JobStatus.FAILED.value,
+                    "error": error_msg,
+                    "details": f"Failed at step: {job.meta.get('details')}",
+                }
+            )
+            job.save_meta()
+
+        raise RuntimeError(error_msg) from e
 
 
 class TSDHNJob:
@@ -217,13 +298,22 @@ class TSDHNJob:
 
     def __init__(self, redis_host="localhost", redis_port=6379, redis_db=0):
         self.redis = Redis(
-            host=redis_host, port=redis_port, db=redis_db, socket_connect_timeout=5
+            host=redis_host,
+            port=redis_port,
+            db=redis_db,
+            socket_connect_timeout=5,
+            socket_keepalive=True,
         )
         self.queue = Queue("tsdhn_queue", connection=self.redis)
 
     def enqueue_job(self, skip_steps: List[str] = None) -> str:
-        """Enqueue a new TSDHN job with Redis connection handling"""
+        """Enqueue a new TSDHN job with validation"""
         try:
+            # Validate steps before queuing
+            all_steps = [step.name for step in PROCESSING_PIPELINE + TTT_MUNDO_STEPS]
+            if invalid := set(skip_steps or []) - set(all_steps):
+                raise ValueError(f"Invalid steps to skip: {invalid}")
+
             job_id = str(uuid.uuid4())
             self.queue.enqueue(
                 execute_tsdhn_commands,
@@ -232,37 +322,38 @@ class TSDHNJob:
                 job_id=job_id,
                 job_timeout="2h",
                 result_ttl=86400,
-                meta={"status": JobStatus.QUEUED.value},
+                meta={"status": JobStatus.QUEUED.value, "details": "Waiting in queue"},
             )
             return job_id
-        except Redis.exceptions.ConnectionError:
+        except ConnectionError:
             logger.error("Failed to connect to Redis")
             raise
-        except Exception:
+        except Exception as e:
             logger.exception("Job enqueue failed")
-            raise
+            raise RuntimeError(f"Job submission failed: {str(e)}") from e
 
     def get_job_status(self, job_id: str) -> Dict:
-        """Get job status with proper error handling"""
+        """Get comprehensive job status information"""
         try:
             job = Job.fetch(job_id, connection=self.redis)
-            status = job.meta.get("status", JobStatus.QUEUED.value)
+            status = job.get_status()
 
-            if job.is_failed:
-                status = JobStatus.FAILED.value
-                job.meta.setdefault("error", "Job failed without specific error")
-            elif job.is_finished and status != JobStatus.COMPLETED.value:
-                status = JobStatus.COMPLETED.value
-
-            job.meta["status"] = status
-            job.save_meta()
+            # Map RQ statuses to our JobStatus enum
+            status_map = {
+                "queued": JobStatus.QUEUED.value,
+                "started": JobStatus.RUNNING.value,
+                "finished": JobStatus.COMPLETED.value,
+                "failed": JobStatus.FAILED.value,
+            }
 
             return {
-                "status": status,
+                "status": status_map.get(status, JobStatus.QUEUED.value),
+                "details": job.meta.get("details"),
                 "error": job.meta.get("error"),
                 "created_at": job.created_at.isoformat() if job.created_at else None,
                 "started_at": job.started_at.isoformat() if job.started_at else None,
                 "ended_at": job.ended_at.isoformat() if job.ended_at else None,
+                "report_path": job.meta.get("report_path"),
             }
         except Exception as e:
             logger.exception(f"Status check failed for job {job_id}")
