@@ -111,7 +111,7 @@ async def run_tsdhn_endpoint():
     """
     try:
         logger.info("Enqueueing new TSDHN job")
-        job_id = tsdhn_queue.enqueue_job()
+        job_id = tsdhn_queue.enqueue_job(skip_steps=["tsunami"])
         return {
             "status": "queued",
             "job_id": job_id,
