@@ -4,7 +4,7 @@
 scan_dirs=("orchestrator")
 ignore_paths=("tests")
 ignore_wildcards=("__pycache__")
-root_files=("")
+root_files=("") # e.g. pyproject.toml
 allowed_extensions=("py")
 
 # Function to build ignore clause
