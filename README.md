@@ -309,19 +309,19 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
 
 ## Pruebas personalizadas
 
-Además de las [pruebas unitarias](orchestrator/tests/), proporcionamos un script [example.py](example.py) para evaluar el comportamiento del modelo con parámetros personalizados. Para su uso, **la API debe estar activa** en segundo plano. Verifique su disponibilidad con:
+Además de las [pruebas unitarias](orchestrator/tests/), proporcionamos un script ([`example.py`](example.py)) para evaluar el comportamiento del modelo con parámetros personalizados. Para su uso, **la API debe estar activa** en segundo plano. Verifica su disponibilidad con:
 
 ```bash
 curl -fsS http://localhost:8000/health-check
 ```
 
-Para modificar los parámetros del evento sísmico, edita `earthquake_data` en [example.py](example.py?plain=1#L13). Luego, ejecuta:
+Para modificar los parámetros del evento sísmico, edita <kbd>earthquake_data</kbd> en [example.py](example.py?plain=1#L13). Luego, ejecuta:
 
 ```bash
 poetry run python example.py --test
 ```
 
-Este comando prueba tres endpoints (`/calculate`, `/tsunami-travel-times`, `/run-tsdhn`) y almacena el ID resultante en `last_job_id.txt`. Al finalizar, el script preguntará si desea iniciar el monitoreo automático.
+Este comando prueba tres endpoints (`/calculate`, `/tsunami-travel-times`, `/run-tsdhn`) y almacena el ID de la tarea en `last_job_id.txt`. Al finalizar, el script preguntará si desea iniciar el monitoreo automático.
 
 Para seguir el progreso de simulaciones existentes, utilice el argumento `--monitor` con cualquiera de estos formatos:
 
@@ -333,7 +333,7 @@ poetry run python example.py --monitor <job-id> --interval 300
 poetry run python example.py --monitor last --timeout 7200
 ```
 
-Puedes interrumpir el monitoreo sin afectar la simulación, presione <kbd>Ctrl+C</kbd>.
+Puedes interrumpir el monitoreo sin afectar la simulación presionando <kbd>Ctrl+C</kbd>.
 
 ## Notas adicionales
 
