@@ -2,17 +2,22 @@
 #mkdir zfolder 
 clear
 echo 'Estimación rápida de parámetros de tsunami de origen lejano'
-chmod 775 fault_plane # proviene de fault_plane.f90
+# compilar con gfortran: fault_plane.f90 -> fault_plane
+chmod 775 fault_plane 
 ./fault_plane
-# pfalla.inp es generado por fault_plane.f90
-chmod 775 deform # proviene de def_oka.f, usa pfalla.inp como input
+# ./fault_plane genera pfalla.inp
+# compilar con gfortran: def_oka.f -> deform
+# ./deform usa pfalla.inp
+chmod 775 deform
 ./deform
+# compilar con gfortran: tsunami1.for -> tsunami
 chmod 775 tsunami
 ./tsunami
 echo 'Mapa de energia'
 chmod 775 espejo
 chmod 775 maxola.csh
 ./maxola.csh
+# compilar con ifortran: ttt_max.f90 -> ttt_max
 chmod 775 ttt_max
 chmod 775 mareograma.csh
 chmod 775 mareograma1.csh
@@ -22,13 +27,17 @@ echo 'Mareogramas ...'
 #./mareograma.csh
 echo 'Tiempo de arribo ...'
 cd ttt_mundo
+# compilar con gfortran: ttt_mundo/ttt_inverso.f -> ttt_inverso
 chmod 775 ttt_inverso
+# inverse is a csh script
 chmod 775 inverse
 chmod 775 point_ttt
 ./ttt_inverso
+# point_ttt is a csh script
 ./point_ttt
 cp ttt.eps ../ttt.eps
 cd ..
+# compilar con gfortran: reporte.f90 -> reporte
 chmod 775 reporte
 ./reporte
 pdflatex reporte.tex
@@ -36,4 +45,3 @@ evince reporte.pdf &
 gedit salida.txt &
 rm reporte.aux
 rm reporte.log
-

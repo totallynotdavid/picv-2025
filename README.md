@@ -40,75 +40,187 @@ flowchart TB
 ## Instalación
 
 > [!WARNING]
-> El proyecto ha sido desarrollado para ejecutarse en entornos Linux (recomendamos utilizar **Ubuntu 20.04**). Para usuarios de Windows, es necesario configurar **Windows Subsystem for Linux (WSL versión 2.0 o superior)**. Puedes seguir la guía oficial de Microsoft para instalar WSL: [<kbd>Instalación de WSL</kbd>](https://learn.microsoft.com/es-es/windows/wsl/install).
+> El proyecto requiere **Ubuntu 20.04** o superior. Usuarios de Windows deben configurar Windows Subsystem for Linux (WSL 2.0 o superior) siguiendo la [<kbd>guía oficial</kbd>](https://learn.microsoft.com/es-es/windows/wsl/install) de Microsoft antes de continuar.
 
 **Prerrequisitos:**
 
-1. Python 3.10.0
+Actualice los paquetes del sistema antes de iniciar:
+
+```bash
+sudo apt update -y && sudo apt upgrade -y
+```
+
+1. **Python** (con [pyenv](https://github.com/pyenv/pyenv)): Usamos pyenv porque nos permite gestionar múltiples versiones de Python. Ejecute:
+
    ```bash
-   sudo apt update -y && sudo apt upgrade -y
-   python3 --version
+   curl -fsSL https://pyenv.run | bash
+   ```
+
+   <ins>Si estás usando WSL</ins>, ejecuta lo siguiente [[1](https://stackoverflow.com/a/76483889)]:
+
+   ```bash
+   cat << 'EOF' >> ~/.bashrc
+   export PYENV_ROOT="$HOME/.pyenv"
+   export PATH="$PYENV_ROOT/bin:$PATH"
+   eval "$(pyenv init -)"
+   EOF
+   ```
+
+   <ins>Si estás usando Ubuntu de forma nativa</ins>, ejecuta lo siguiente [[2](https://github.com/pyenv/pyenv?tab=readme-ov-file#bash)]:
+
+   ```bash
+   cat << 'EOF' >> ~/.bashrc
+   export PYENV_ROOT="$HOME/.pyenv"
+   [[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+   eval "$(pyenv init - bash)"
+   EOF
+   ```
+
+   En cualquiera de los dos casos, aplica los cambios con:
+
+   ```bash
+   source ~/.bashrc
+   ```
+
+   pyenv compila Python a partir del código fuente durante la instalación, por lo que resulta necesario instalar previamente las dependencias de compilación [[3](https://stackoverflow.com/a/74314165)] [[4](https://github.com/pyenv/pyenv/wiki#suggested-build-environment)] y, luego, instala Python:
+
+   ```bash
+   sudo apt install -y build-essential zlib1g-dev libffi-dev libssl-dev libbz2-dev libreadline-dev libsqlite3-dev liblzma-dev libncurses-dev tk-dev
+   pyenv install 3.12 && pyenv global 3.12
+   ```
+
+   Si deseas usar Python del sistema en lugar de `pyenv`, solo necesitas instalar `pip3`:
+
+   ```bash
    sudo apt install -y python3-pip
    ```
-2. Poetry 2.0.1 (utilizamos Poetry para manejar nuestras dependencias)
+
+   En cualquiera de los dos casos, verifica la instalación:
+
+   ```bash
+   python3 -V
+   pip3 -V
+   ```
+
+2. [**Poetry**](https://python-poetry.org/docs) nos ayuda a gestionar nuestras dependencias de forma consistente entre dispositivos. Poetry se encarga de instalar las librerías que usamos.
 
    ```bash
    curl -sSL https://install.python-poetry.org | python3 -
    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
    source ~/.bashrc
+   ```
+
+   Verifica la instalación:
+
+   ```bash
    poetry --version
    ```
 
-3. Dependencias adicionales: `gfortran 11.4.0`, `redis-server`, `gmt` y `ps2eps`
+3. El software [**TTT SDK**](https://www.geoware-online.com/tsunami.html) (Tsunami Travel Time) calcula los tiempos de arribo de un tsunami a partir de la batimetría de una cuadrícula geográfica (el océano Pacífico en nuestro caso). Para instalarlo, necesitas `git-lfs` para clonar los archivos de datos grandes del repositorio y `cmake` para compilar e instalar el software:
 
    ```bash
-   sudo apt install -y gfortran redis-server ps2eps
-   sudo apt install gmt gmt-dcw gmt-gshhg
-   gfortran --version
+   sudo apt install -y git-lfs cmake
    ```
 
-   Configura Redis para que sea gestionado por systemd (en Ubuntu):
+   Para instalar el TTT SDK:
 
    ```bash
-   sudo sed -i 's/supervised no/supervised systemd/' /etc/redis/redis.conf
+   git clone https://gitlab.com/totallynotdavid/tttapi/
+   cd tttapi && make config compile && sudo make install datadir docs
+   make test clean
+   ```
+
+> [!NOTE]
+> El SDK usa GitLab para aprovechar su política de LFS gratuito y reducir la carga en los servidores de los autores durante pruebas CI/CD.
+
+4. **TeXLive** es utilizado para la generación de los informes. Para simplificar el proceso, se opta por una instalación mínima. Ejecute:
+
+   ```bash
+   cd /tmp
+   wget https://mirror.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz
+   zcat < install-tl-unx.tar.gz | tar xf -
+   cd install-tl-2*
+   ```
+
+   Crea un perfil de instalación denominado <kbd>texlive.profile</kbd> con el siguiente contenido:
+
+   ```bash
+   cat > texlive.profile << EOF
+   selected_scheme scheme-basic
+   tlpdbopt_autobackup 0
+   tlpdbopt_install_docfiles 0
+   tlpdbopt_install_srcfiles 0
+   EOF
+   ```
+
+   La instalación se realiza en el directorio del usuario para evitar problemas relacionados a permisos y evitar el [modo usuario](https://www.tug.org/texlive/doc/tlmgr.html#USER-MODE) de TeXLive [[5](https://tex.stackexchange.com/a/676880)]:
+
+   ```bash
+   perl ./install-tl --profile=texlive.profile \
+                     --texdir "$HOME/texlive" \
+                     --texuserdir "$HOME/.texlive" \
+                     --no-interaction
+   ```
+
+   Configuración del <kbd>PATH</kbd>:
+
+   ```bash
+   echo -e '\nexport PATH="$HOME/texlive/bin/x86_64-linux:$PATH"' >> ~/.bashrc
+   source ~/.bashrc
+   ```
+
+   Instalación de paquetes LaTeX necesarios:
+
+   ```bash
+   tlmgr update --self && tlmgr install babel-spanish hyphen-spanish booktabs
+   ```
+
+5. Dependencias adicionales: `gfortran`, `redis-server`, `gmt`, `ps2eps`, `csh`. Ejecute:
+
+   ```bash
+   sudo apt install -y gfortran redis-server gmt gmt-dcw gmt-gshhg ps2eps csh
+   ```
+
+   Configura Redis para ser gestionado por systemd:
+
+   ```bash
+   sudo sed -i 's/^# \?supervised \(no\|auto\)/supervised systemd/' /etc/redis/redis.conf
    sudo systemctl restart redis-server
    ```
 
-4. Opcional: [MATLAB R2014](https://drive.google.com/file/d/1VhLnwXX78Y7O8huwlRuE-shOW2LKlVpd/view?usp=drive_link) (si piensas ejecutar la interfaz gráfica original: [<kbd>tsunami.m</kbd>](model/tsunami.m))
-
-En cuanto al hardware, se recomienda tener al menos 8 GB de RAM, un CPU con 4 núcleos físicos y 5 GB de espacio libre en disco.
+6. Si necesitas ejecutar la interfaz gráfica original ([<kbd>tsunami.m</kbd>](model/tsunami.m)), puedes instalar [MATLAB R2014](https://drive.google.com/file/d/1VhLnwXX78Y7O8huwlRuE-shOW2LKlVpd/view?usp=drive_link).
 
 **Pasos de instalación:**
 
-1. Clonar el repositorio:
+1. Clona el repositorio e instala las dependencias:
 
    ```bash
    git clone https://github.com/totallynotdavid/picv-2025
-   cd picv-2025
-   ```
-
-2. Instalar dependencias con Poetry:
-
-   ```bash
-   poetry install
+   cd picv-2025 && poetry install
    poetry self add 'poethepoet[poetry_plugin]'
-   eval $(poetry env activate)
    ```
 
-3. Verificar la instalación ejecutando:
+2. Valide la instalación con:
 
    ```bash
-   poetry run pytest
+   poetry run pytest # Todos los tests deben pasar
    ```
 
-4. Para ejecutar la API:
+3. Para iniciar la API:
 
    ```bash
    poetry run start
-   rq worker tsdhn_queue
    ```
 
    La API estará disponible en `http://localhost:8000`.
+
+   En un terminal diferente, ejecuta el siguiente comando para iniciar el worker RQ:
+
+   ```bash
+   poetry run rq worker tsdhn_queue
+   ```
+
+   Asegúrate de ejecutar `rq worker tsdhn_queue` dentro del entorno de Poetry para garantizar el acceso a todas las dependencias necesarias.
 
 ## Estructura del proyecto
 
@@ -194,6 +306,34 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
 
 > [!WARNING]
 > Los endpoints deben invocarse en orden estricto: `/calculate` :arrow_right: `/tsunami-travel-times` :arrow_right: `/run-tsdhn`, ya que cada uno depende del resultado del anterior.
+
+## Pruebas personalizadas
+
+Además de las [pruebas unitarias](orchestrator/tests/), proporcionamos un script ([`example.py`](example.py)) para evaluar el comportamiento del modelo con parámetros personalizados. Para su uso, **la API debe estar activa** en segundo plano. Verifica su disponibilidad con:
+
+```bash
+curl -fsS http://localhost:8000/health
+```
+
+Para modificar los parámetros del evento sísmico, edita <kbd>earthquake_data</kbd> en [example.py](example.py?plain=1#L13). Luego, ejecuta:
+
+```bash
+poetry run python example.py --test
+```
+
+Este comando prueba tres endpoints (`/calculate`, `/tsunami-travel-times`, `/run-tsdhn`) y almacena el ID de la tarea en `last_job_id.txt`. Al finalizar, el script preguntará si desea iniciar el monitoreo automático.
+
+Para seguir el progreso de simulaciones existentes, utilice el argumento `--monitor` con cualquiera de estos formatos:
+
+```bash
+# Monitorear por ID específico con intervalo personalizado
+poetry run python example.py --monitor <job-id> --interval 300
+
+# Usar último ID registrado con límite de tiempo máximo
+poetry run python example.py --monitor last --timeout 7200
+```
+
+Puedes interrumpir el monitoreo sin afectar la simulación presionando <kbd>Ctrl+C</kbd>.
 
 ## Notas adicionales
 
