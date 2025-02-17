@@ -53,49 +53,49 @@ class ProcessingStep:
 
 PROCESSING_PIPELINE = [
     ProcessingStep(
-        "fault_plane",
-        ["./fault_plane"],
-        [("pfalla.inp", "Input file for deform not generated")],
-        CompilerConfig("fault_plane.f90", "fault_plane"),
+        name="fault_plane",
+        command=["./fault_plane"],
+        file_checks=[("pfalla.inp", "Input file for deform not generated")],
+        compiler_config=CompilerConfig("fault_plane.f90", "fault_plane"),
     ),
     ProcessingStep(
-        "deform",
-        ["./deform"],
-        [("deform", "Deform executable missing")],
-        CompilerConfig("def_oka.f", "deform"),
+        name="deform",
+        command=["./deform"],
+        file_checks=[("deform", "Deform executable missing")],
+        compiler_config=CompilerConfig("def_oka.f", "deform"),
     ),
     ProcessingStep(
-        "tsunami",
-        ["./tsunami"],
-        [
+        name="tsunami",
+        command=["./tsunami"],
+        file_checks=[
             ("zfolder/green.dat", "Green data file missing"),
             ("zfolder/zmax_a.grd", "Zmax grid file missing"),
         ],
     ),
     ProcessingStep(
-        "maxola.csh",
-        ["./maxola.csh"],
-        [("maxola.eps", "Maxola output missing")],
+        name="maxola.csh",
+        command=["./maxola.csh"],
+        file_checks=[("maxola.eps", "Maxola output missing")],
         extra_executables=["espejo"],
     ),
     ProcessingStep(
-        "ttt_max",
-        ["./ttt_max"],
-        [
+        name="ttt_max",
+        command=["./ttt_max"],
+        file_checks=[
             ("zfolder/green_rev.dat", "Scaled wave height data output missing"),
             ("ttt_max.dat", "TTT Max data output missing"),
         ],
-        CompilerConfig("ttt_max.f90", "ttt_max"),
+        compiler_config=CompilerConfig("ttt_max.f90", "ttt_max"),
         pre_execute_checks=[("mareograma.csh", "mareograma.csh script missing")],
     ),
 ]
 
 TTT_MUNDO_STEPS = [
     ProcessingStep(
-        "ttt_inverso",
-        ["./ttt_inverso"],
-        [],
-        CompilerConfig("ttt_inverso.f", "ttt_inverso"),
+        name="ttt_inverso",
+        command=["./ttt_inverso"],
+        file_checks=[],
+        compiler_config=CompilerConfig("ttt_inverso.f", "ttt_inverso"),
         extra_executables=["inverse"],
     ),
 ]
@@ -133,40 +133,55 @@ def validate_files(cwd: Path, checks: List[Tuple[str, str]]) -> None:
 
 def process_step(step: ProcessingStep, working_dir: Path) -> None:
     """Process a single pipeline step"""
-    # Compile if necessary
     if step.compiler_config:
         compile_fortran(working_dir, step.compiler_config)
         make_executable(working_dir / step.compiler_config.output)
 
-    # Pre-execution checks
     if step.pre_execute_checks:
         validate_files(working_dir, step.pre_execute_checks)
         for check in step.pre_execute_checks:
             make_executable(working_dir / check[0])
 
-    # Make additional executables executable
     for executable in step.extra_executables:
         make_executable(working_dir / executable)
 
-    # Execute main command and validate
     make_executable(working_dir / step.command[0])
     subprocess.run(step.command, cwd=working_dir, check=True)
     validate_files(working_dir, step.file_checks)
 
 
-def execute_tsdhn_commands(job_id: str) -> Dict:
-    """Execute TSDHN workflow with accurate file validation"""
+def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
     try:
         logger.info(f"Starting TSDHN execution for job {job_id}")
-        model_dir = Path("model")
+
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        model_dir = repo_root / "model"
+        logger.info(f"Using model directory: {model_dir}")
+
+        if not model_dir.exists():
+            raise FileNotFoundError(f"🔴 Model directory missing at {model_dir}")
+
         ttt_mundo_dir = model_dir / "ttt_mundo"
+        skip_steps = skip_steps or []
+
+        # Validate skip_steps parameter
+        all_steps = [step.name for step in PROCESSING_PIPELINE + TTT_MUNDO_STEPS]
+        invalid_steps = set(skip_steps) - set(all_steps)
+        if invalid_steps:
+            raise ValueError(f"Invalid steps to skip: {invalid_steps}")
 
         # Main processing steps
         for step in PROCESSING_PIPELINE:
+            if step.name in skip_steps:
+                logger.info(f"Skipping step: {step.name}")
+                continue
             process_step(step, model_dir)
 
         # TTT Mundo processing
         for step in TTT_MUNDO_STEPS:
+            if step.name in skip_steps:
+                logger.info(f"Skipping step: {step.name}")
+                continue
             process_step(step, ttt_mundo_dir)
 
         # Final report generation
@@ -180,7 +195,6 @@ def execute_tsdhn_commands(job_id: str) -> Dict:
         subprocess.run(["pdflatex", "reporte.tex"], cwd=model_dir, check=True)
         validate_files(model_dir, [("reporte.pdf", "PDF report not generated")])
 
-        # Cleanup
         subprocess.run(
             ["rm", "-f", "reporte.aux", "reporte.log"], cwd=model_dir, check=True
         )
@@ -207,13 +221,14 @@ class TSDHNJob:
         )
         self.queue = Queue("tsdhn_queue", connection=self.redis)
 
-    def enqueue_job(self) -> str:
+    def enqueue_job(self, skip_steps: List[str] = None) -> str:
         """Enqueue a new TSDHN job with Redis connection handling"""
         try:
             job_id = str(uuid.uuid4())
             self.queue.enqueue(
                 execute_tsdhn_commands,
                 job_id,
+                skip_steps=skip_steps or [],
                 job_id=job_id,
                 job_timeout="2h",
                 result_ttl=86400,
@@ -233,14 +248,12 @@ class TSDHNJob:
             job = Job.fetch(job_id, connection=self.redis)
             status = job.meta.get("status", JobStatus.QUEUED.value)
 
-            # Update status based on RQ's internal state
             if job.is_failed:
                 status = JobStatus.FAILED.value
                 job.meta.setdefault("error", "Job failed without specific error")
             elif job.is_finished and status != JobStatus.COMPLETED.value:
                 status = JobStatus.COMPLETED.value
 
-            # Persist status changes
             job.meta["status"] = status
             job.save_meta()
 
