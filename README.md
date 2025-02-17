@@ -307,6 +307,34 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
 > [!WARNING]
 > Los endpoints deben invocarse en orden estricto: `/calculate` :arrow_right: `/tsunami-travel-times` :arrow_right: `/run-tsdhn`, ya que cada uno depende del resultado del anterior.
 
+## Pruebas personalizadas
+
+Además de las [pruebas unitarias](orchestrator/tests/), proporcionamos un script [example.py](example.py) para evaluar el comportamiento del modelo con parámetros personalizados. Para su uso, **la API debe estar activa** en segundo plano. Verifique su disponibilidad con:
+
+```bash
+curl -fsS http://localhost:8000/health-check
+```
+
+Para modificar los parámetros del evento sísmico, edita `earthquake_data` en [example.py](example.py?plain=1#L13). Luego, ejecuta:
+
+```bash
+poetry run python example.py --test
+```
+
+Este comando prueba tres endpoints (`/calculate`, `/tsunami-travel-times`, `/run-tsdhn`) y almacena el ID resultante en `last_job_id.txt`. Al finalizar, el script preguntará si desea iniciar el monitoreo automático.
+
+Para seguir el progreso de simulaciones existentes, utilice el argumento `--monitor` con cualquiera de estos formatos:
+
+```bash
+# Monitorear por ID específico con intervalo personalizado
+poetry run python example.py --monitor <job-id> --interval 300
+
+# Usar último ID registrado con límite de tiempo máximo
+poetry run python example.py --monitor last --timeout 7200
+```
+
+Puedes interrumpir el monitoreo sin afectar la simulación, presione <kbd>Ctrl+C</kbd>.
+
 ## Notas adicionales
 
 - La API guarda automáticamente algunos eventos en `tsunami_api.log`. Puedes configurar el logger en [`config.py`](/orchestrator/core/config.py) si deseas. El archivo de logs se crea cuando inicias la API.
