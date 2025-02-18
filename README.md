@@ -133,7 +133,7 @@ sudo apt update -y && sudo apt upgrade -y
 > [!NOTE]
 > El SDK usa GitLab para aprovechar su política de LFS gratuito y reducir la carga en los servidores de los autores durante pruebas CI/CD.
 
-4. **TeXLive** es utilizado para la generación de los informes. Para simplificar el proceso, se opta por una instalación mínima. Ejecute:
+4. [**TeXLive**](https://www.tug.org/texlive/quickinstall.html) es utilizado para la generación de los informes. Para simplificar el proceso, se opta por una instalación mínima. Ejecute:
 
    ```bash
    cd /tmp
