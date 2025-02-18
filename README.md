@@ -459,7 +459,7 @@ Para monitorear el estado de una simulación específica, ejecuta:
 poetry run python example.py --monitor <ID-simulación> --intervalo 300
 ```
 
-El ID de la simulación se puede encontrar en `last_job_id.txt` o revisando los logs en `rq`. Este comando verificará el progreso de la simulación pedida cada 300 segundos (5 minutos).
+El ID de la simulación se puede encontrar en `last_job_id.txt` o revisando los logs del worker RQ. Este comando verificará el progreso de la simulación pedida cada 300 segundos (5 minutos).
 
 Si deseas reanudar la última simulación registrada, ejecuta:
 
