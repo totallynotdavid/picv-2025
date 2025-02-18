@@ -414,12 +414,12 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
    ```json
    {
      "status": "completed",
-     "details": "Generating final report",
+     "details": "Job completed successfully",
      "error": null,
      "created_at": "2025-02-17T19:46:08.171522",
      "started_at": "2025-02-17T19:46:08.345851",
      "ended_at": "2025-02-17T20:27:44.304036",
-     "report_path": "/jobs/dee661ec-1c39-47e5-bb50-3926fa70bb8e/reporte.pdf"
+     "download_url": "/job-result/dee661ec-1c39-47e5-bb50-3926fa70bb8e/reporte.pdf"
    }
    ```
 

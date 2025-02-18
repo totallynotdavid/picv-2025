@@ -256,15 +256,17 @@ def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
         for f in ["reporte.aux", "reporte.log"]:
             (job_work_dir / f).unlink(missing_ok=True)
 
+        download_url = f"/job-result/{job_id}"
         result = {
             "status": JobStatus.COMPLETED.value,
             "job_id": job_id,
-            "report_path": str(job_work_dir / "reporte.pdf"),
+            "download_url": download_url,
         }
 
         if job:
             job.meta.update(result)
             job.meta["status"] = JobStatus.COMPLETED.value
+            job.meta["details"] = "Job completed successfully"
             job.save_meta()
 
         return result
@@ -341,7 +343,7 @@ class TSDHNJob:
                 "created_at": job.created_at.isoformat() if job.created_at else None,
                 "started_at": job.started_at.isoformat() if job.started_at else None,
                 "ended_at": job.ended_at.isoformat() if job.ended_at else None,
-                "report_path": job.meta.get("report_path"),
+                "download_url": job.meta.get("download_url"),
             }
         except Exception as e:
             logger.exception(f"Status check failed for job {job_id}")

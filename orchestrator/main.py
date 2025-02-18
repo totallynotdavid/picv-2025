@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Dict
 
 import uvicorn
@@ -184,7 +185,8 @@ async def get_job_result_endpoint(job_id: str):
             )
 
         # Check if report exists
-        report_path = MODEL_DIR / "reporte.pdf"
+        job_work_dir = Path(MODEL_DIR).parent / "jobs" / job_id
+        report_path = job_work_dir / "reporte.pdf"
         if not report_path.exists():
             raise HTTPException(status_code=404, detail="Report file not found")
 
