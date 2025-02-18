@@ -221,7 +221,7 @@ sudo apt update -y && sudo apt upgrade -y
    ```
 
 > [!TIP]
-> Si deseas probar el modelo con condiciones específicas, consulta la sección [Pruebas personalizadas](#pruebas-personalizadas).
+> Si deseas probar el modelo con condiciones específicas, consulta la sección de [pruebas personalizadas](#pruebas-personalizadas).
 
 ## Estructura del proyecto
 
