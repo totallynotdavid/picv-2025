@@ -68,4 +68,5 @@ indent-style = "space"
 line-ending = "auto"
 
 [tool.poe.tasks]
+dev = { shell = "uvicorn orchestrator.main:app --reload" }
 format = { shell = "ruff format && ruff check --fix" }

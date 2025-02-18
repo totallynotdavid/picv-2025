@@ -212,13 +212,19 @@ sudo apt update -y && sudo apt upgrade -y
    poetry run pytest # Todos los tests deben pasar
    ```
 
-3. Para iniciar la API:
+3. Para iniciar la API, ejecuta:
 
    ```bash
    poetry run start
    ```
 
    La API estará disponible en `http://localhost:8000`.
+
+   Si estás modificando el código y quieres que la aplicación se recargue automáticamente cuando hagas cambios, usa este comando:
+
+   ```bash
+   poetry poe format
+   ```
 
    En un terminal diferente, ejecuta el siguiente comando para iniciar el RQ worker:
 
