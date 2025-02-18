@@ -1,4 +1,5 @@
 import logging
+import os
 import uuid
 from pathlib import Path
 
@@ -28,16 +29,24 @@ def validate_job_id(job_id: str) -> None:
 
 
 def secure_path_construction(job_id: str) -> Path:
-    """
-    Safely construct and validate the job directory
-    path to prevent path traversal attacks.
-    """
     base_dir = (Path(MODEL_DIR).parent / "jobs").resolve()
-    job_dir = (base_dir / job_id).resolve()
+    base_str = str(base_dir)
 
-    # Ensure that the resolved job directory is under the base directory.
-    if not job_dir.is_relative_to(base_dir):
+    # Construct the path and normalize it
+    constructed_path = os.path.join(base_str, job_id)
+    normalized_path = os.path.normpath(constructed_path)
+
+    # Check if the normalized path is within the base directory
+    if not normalized_path.startswith(base_str):
         logger.error(f"Path traversal attempt detected: {job_id}")
+        raise HTTPException(status_code=400, detail="Invalid job path")
+
+    # Convert to Path and resolve any symlinks
+    job_dir = Path(normalized_path).resolve()
+
+    # Ensure the resolved path is still within the base directory
+    if not job_dir.is_relative_to(base_dir):
+        logger.error(f"Resolved path traversal detected: {job_id}")
         raise HTTPException(status_code=400, detail="Invalid job path")
 
     return job_dir
