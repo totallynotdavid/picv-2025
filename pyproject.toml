@@ -69,4 +69,5 @@ line-ending = "auto"
 
 [tool.poe.tasks]
 dev = { shell = "uvicorn orchestrator.main:app --reload" }
+db = { shell = "rq worker tsdhn_queue" }
 format = { shell = "ruff format && ruff check --fix" }
