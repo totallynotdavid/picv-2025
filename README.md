@@ -220,8 +220,6 @@ sudo apt update -y && sudo apt upgrade -y
    poetry run rq worker tsdhn_queue
    ```
 
-   Asegúrate de ejecutar `rq worker tsdhn_queue` dentro del entorno de Poetry para garantizar el acceso a todas las dependencias necesarias.
-
 ## Estructura del proyecto
 
 El repositorio se organiza en dos componentes principales:
