@@ -1,0 +1,4 @@
+htmlcov/
+model/
+.ruff_cache/
+.pytest_cache/
