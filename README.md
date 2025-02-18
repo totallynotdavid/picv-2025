@@ -325,7 +325,7 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
 2. [`POST /tsunami-travel-times`](orchestrator/main.py?plain=1#L45) utiliza los mismos datos de entrada que `/calculate` y realiza una serie de integraciones vectorizadas para calcular los tiempos de arribo a puertos predefinidos en [`puertos.txt`](/model/puertos.txt). La respuesta es un objeto JSON que incluye tanto los tiempos de arribo como las distancias a cada estación.
 
    <details>
-   <summary>Ejemplo de respuesta esperada:</summary>
+   <summary>Ejemplo de respuesta esperada</summary>
 
    ```json
    {
@@ -362,7 +362,7 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
    - [`reporte.pdf`](model/reporte.pdf): Mapas de altura de olas, mareógrafos y parámetros técnicos.
 
    <details>
-   <summary>Ejemplo de respuesta esperada:</summary>
+   <summary>Ejemplo de respuesta esperada</summary>
 
    ```json
    {
