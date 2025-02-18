@@ -442,15 +442,15 @@ Antes de ejecutar el cliente, asegúrate de que **la API esté activa** en segun
 curl -fsS http://localhost:8000/health
 ```
 
-Si deseas configurar los parámetros de la simulación, edita los valores en <kbd>earthquake_data</kbd> en [example.py](example.py?plain=1#L65). Luego, ejecuta:
+Si deseas configurar los parámetros de la simulación, edita los valores en [example.py](example.py?plain=1#L65). Luego, ejecuta:
 
 ```bash
 poetry run python example.py --test
 ```
 
-Este comando prueba secuencialmente los endpoints `/calculate`, `/tsunami-travel-times` y `/run-tsdhn`. Una vez completada la inicialización, el cliente consulta al usuario si desea monitorear el progreso de la simulación. Para esto, se utilizan los endpoints `/job-status` y `/job-result`.
+Este comando prueba secuencialmente los endpoints `/calculate`, `/tsunami-travel-times` y `/run-tsdhn`. Una vez completada la inicialización, el cliente consultará al usuario si desea monitorear el progreso de la simulación. Para esto, se utilizan los endpoints `/job-status` y `/job-result`.
 
-La primera vez que ejecutes el cliente, se crearán automáticamente dos archivos:
+La primera vez que el cliente se ejecute, se crearán automáticamente dos archivos:
 
 1. `configuracion_simulación.json`: Guarda los parámetros de la simulación para futuras referencias.
 2. `last_job_id.txt`: Guarda el identificador de la simulación para monitorear su progreso.
@@ -473,8 +473,8 @@ Este comando monitorea la última simulación registrada por un máximo de 7200 
 
 Los parámetros disponibles para la monitorización:
 
-- `--monitor`: Especifica el identificador de la simulación a monitorizar. Use "last" para la simulación más reciente.
-- `--interval`: Define el intervalo de verificación en segundos (predeterminado: 60).
+- `--monitor`: Especifica el identificador de la simulación a monitorizar. Use "`last`" para la simulación más reciente.
+- `--interval`: Define el intervalo de verificación en segundos (predeterminado: `60`).
 - `--timeout`: Establece el tiempo máximo de monitorización en segundos (opcional).
 - `--no-guardar`: Evita que se descargue y guarde automáticamente el informe de resultados.
 - `--url`: Especifica una URL base alternativa para la API (predeterminado: http://localhost:8000). Útil para pruebas en entornos remotos.
