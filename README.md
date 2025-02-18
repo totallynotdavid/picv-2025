@@ -440,7 +440,7 @@ Además de las [pruebas unitarias](orchestrator/tests/), hemos incluido un clien
 curl -fsS http://localhost:8000/health
 ```
 
-Si deseas configurar los parámetros de la simulación, edita los valores en <kbd>earthquake_data</kbd> en [example.py](example.py?plain=1#L13). Luego, ejecuta:
+Si deseas configurar los parámetros de la simulación, edita los valores en <kbd>earthquake_data</kbd> en [example.py](example.py?plain=1#L65). Luego, ejecuta:
 
 ```bash
 poetry run python example.py --test
