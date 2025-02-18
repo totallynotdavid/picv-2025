@@ -1,91 +1,167 @@
-import argparse
-import asyncio
-import importlib.util
-import sys
+import shutil
+from typing import Dict, Optional
 
-from .config import ConfigManager
-from .core import JobMonitor, SimulationManager
-from .ui import UserInterface
+from colorama import Fore, Style, init
+
+init(autoreset=True)
+
+COLORS = {
+    "header": Fore.BLUE,
+    "section": Fore.CYAN,
+    "prompt": Fore.YELLOW,
+    "success": Fore.GREEN,
+    "error": Fore.RED,
+    "warning": Fore.YELLOW,
+    "info": Fore.BLUE,
+    "progress": Fore.MAGENTA,
+}
+
+ICONS = {
+    "success": "✅",
+    "error": "❌",
+    "warning": "⚠️ ",
+    "info": "ℹ️ ",
+    "prompt": "❓",
+    "config": "⚙️ ",
+    "simulation": "🌊",
+    "monitoring": "📡",
+    "progress": "▰",
+    "empty": "▱",
+}
 
 
-def check_dependencies():
-    required = {"colorama", "aiohttp"}
-    missing = [pkg for pkg in required if importlib.util.find_spec(pkg) is None]
-    if missing:
-        UserInterface.show_warning(
-            f"Missing packages: {', '.join(missing)}\n"
-            f"Install with: pip install {' '.join(missing)}"
+class UserInterface:
+    _verbose = False
+
+    @classmethod
+    def set_verbose(cls, verbose: bool) -> None:
+        cls._verbose = verbose
+
+    @classmethod
+    def show_header(cls):
+        width = shutil.get_terminal_size().columns
+        print(
+            f"\n{COLORS['header']}{Style.BRIGHT}"
+            f"🌊 CLIENTE DE SIMULACIÓN TSUNAMI [v1.0]{Style.RESET_ALL}"
         )
-        sys.exit(1)
+        print(f"{COLORS['header']}{'=' * width}{Style.RESET_ALL}\n")
 
+    @classmethod
+    def show_section(cls, title: str, icon: str = "section"):
+        icon_map = {
+            "config": ICONS["config"],
+            "connection": "🌐",
+            "analysis": "🚀",
+            "monitoring": ICONS["monitoring"],
+            "success": ICONS["success"],
+            "error": ICONS["error"],
+        }
+        section_icon = icon_map.get(icon.lower(), "»")
+        print(
+            f"\n{COLORS['section']}{Style.BRIGHT}"
+            f"{section_icon} {title.upper()}{Style.RESET_ALL}"
+        )
+        cls._print_rule()
 
-async def main():
-    check_dependencies()
+    @staticmethod
+    def _print_rule(length: int = None):
+        length = length or shutil.get_terminal_size().columns - 2
+        print(f"{COLORS['section']}{'─' * length}{Style.RESET_ALL}")
 
-    parser = argparse.ArgumentParser(
-        description="Cliente TSDHN - Sistema de Alerta de Tsunamis",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-    )
+    @classmethod
+    def show_parameters(cls, config: Dict):
+        params = config["simulation_params"]
+        labels = {
+            "Mw": ("Magnitud (Mw)", ""),
+            "h": ("Profundidad", " km"),
+            "lat0": ("Latitud", "°"),
+            "lon0": ("Longitud", "°"),
+            "hhmm": ("Hora UTC", ""),
+            "dia": ("Día del mes", ""),
+        }
 
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--test", action="store_true", help="Ejecutar prueba completa")
-    group.add_argument(
-        "--monitor", nargs="?", const="last", help="Monitorear simulación"
-    )
+        max_length = max(len(l[0]) for l in labels.values())
 
-    parser.add_argument("--url", help="URL base de la API")
-    parser.add_argument("--intervalo", type=int, help="Intervalo de verificación (s)")
-    parser.add_argument("--timeout", type=int, help="Tiempo máximo de monitoreo (s)")
-    parser.add_argument("--no-guardar", action="store_false", dest="save_results")
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Mostrar detalles técnicos"
-    )
+        print(f"{COLORS['info']}Parámetros de simulación:{Style.RESET_ALL}")
+        for key, (label, unit) in labels.items():
+            value = f"{params.get(key, 'N/D')}{unit}"
+            print(f"  {label.ljust(max_length)} : {Fore.WHITE}{value}")
 
-    args = parser.parse_args()
+    @classmethod
+    def show_progress_step(cls, current: int, total: int, label: str, duration: float):
+        progress = f"[{current}/{total}]".ljust(6)
+        duration_str = f"{Fore.WHITE}({duration:.1f}s){Style.RESET_ALL}"
+        print(
+            f"{COLORS['progress']}{Style.BRIGHT}"
+            f"{progress} {label.ljust(40)} {ICONS['success']} "
+            f"{duration_str}"
+        )
 
-    cm = ConfigManager()
-    config = cm.load_config()
-    UserInterface.set_verbose(args.verbose)
+    @classmethod
+    def show_monitoring_status(cls, elapsed: str, progress: float, eta: str):
+        bar = cls._progress_bar(progress)
+        print(f"{COLORS['info']}│ {elapsed} {bar} {eta}{Style.RESET_ALL}")
 
-    # Map CLI arguments to configuration keys
-    if args.url is not None:
-        config["base_url"] = args.url
-    if args.intervalo is not None:
-        config["check_interval"] = args.intervalo
-    if args.timeout is not None:
-        config["timeout"] = args.timeout
-    if args.save_results is not None:
-        config["save_results"] = args.save_results
+    @staticmethod
+    def _progress_bar(progress: float, width: int = 30):
+        filled = int(width * progress)
+        return (
+            f"{Fore.GREEN}{ICONS['progress'] * filled}"
+            f"{Fore.WHITE}{ICONS['empty'] * (width - filled)}"
+            f"{Style.RESET_ALL} {progress:.0%}"
+        )
 
-    try:
-        if args.test:
-            if UserInterface.confirm("¿Desea modificar los parámetros de simulación?"):
-                config = SimulationManager.prompt_parameters(config)
+    @classmethod
+    def confirm(cls, prompt: str) -> bool:
+        response = input(f"{COLORS['prompt']}? {prompt} (s/n): ").lower()
+        return response in {"s", "si", "sí", "y", "yes"}
 
-            manager = SimulationManager(config)
-            job_id = await manager.full_test_flow()
+    @classmethod
+    def get_input(cls, prompt: str, default: Optional[str] = None) -> str:
+        default_text = f" [{default}]" if default else ""
+        return input(f"{COLORS['prompt']}? {prompt}{default_text}: ").strip() or default
 
-            if job_id and UserInterface.confirm("¿Monitorizar esta simulación?"):
-                monitor = JobMonitor(config)
-                await monitor.monitor_job(job_id)
-        else:
-            job_id = args.monitor
-            if job_id == "last":
-                job_id = cm.load_last_job_id()
-                if not job_id:
-                    UserInterface.show_error("No hay simulaciones recientes")
-                    return
-                UserInterface.show_info(f"Usando última simulación: {job_id}")
+    @classmethod
+    def get_float(cls, prompt: str, default: float) -> float:
+        while True:
+            try:
+                return float(cls.get_input(prompt, str(default)))
+            except ValueError:
+                cls.show_error("Por favor ingrese un número válido")
 
-            monitor = JobMonitor(config)
-            await monitor.monitor_job(job_id)
+    @classmethod
+    def get_time(cls, prompt: str, default: str) -> str:
+        while True:
+            value = cls.get_input(prompt, default)
+            if len(value) == 4 and value.isdigit():
+                return value
+            cls.show_error("Formato debe ser HHMM (4 dígitos)")
 
-    except KeyboardInterrupt:
-        UserInterface.show_warning("Operación cancelada por el usuario")
-    except Exception as e:
-        UserInterface.show_error(f"Error crítico: {str(e)}")
-        sys.exit(1)
+    @classmethod
+    def get_day(cls, prompt: str, default: str) -> str:
+        while True:
+            value = cls.get_input(prompt, default)
+            if value.isdigit() and 1 <= int(value) <= 31:
+                return value
+            cls.show_error("Día debe estar entre 1 y 31")
 
+    @classmethod
+    def show_status(cls, icon: str, message: str, color: str = Fore.WHITE):
+        print(f"{color}{Style.BRIGHT}{icon} {message}{Style.RESET_ALL}")
 
-if __name__ == "__main__":
-    asyncio.run(main())
+    @classmethod
+    def show_success(cls, message: str):
+        cls.show_status(ICONS["success"], message, COLORS["success"])
+
+    @classmethod
+    def show_error(cls, message: str):
+        cls.show_status(ICONS["error"], message, COLORS["error"])
+
+    @classmethod
+    def show_warning(cls, message: str):
+        cls.show_status(ICONS["warning"], message, COLORS["warning"])
+
+    @classmethod
+    def show_info(cls, *messages: str):
+        for msg in messages:
+            cls.show_status(ICONS["info"], msg, COLORS["info"])

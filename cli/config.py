@@ -17,24 +17,25 @@ class ConfigManager:
                 with self.config_file.open("r", encoding="utf-8") as f:
                     return {**constants.DEFAULT_CONFIG, **json.load(f)}
         except Exception as e:
-            UserInterface.show_warning(f"Error cargando configuración: {str(e)}")
-
+            UserInterface.show_error(f"Error cargando configuración: {str(e)}")
         return constants.DEFAULT_CONFIG
 
     def save_config(self, config: Dict) -> None:
         try:
             with self.config_file.open("w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
-            UserInterface.show_info(f"Configuración guardada en {self.config_file}")
+            UserInterface.show_success(f"Configuración guardada: {self.config_file}")
         except Exception as e:
-            UserInterface.show_warning(f"Error guardando configuración: {str(e)}")
+            UserInterface.show_error(f"Error guardando configuración: {str(e)}")
 
     def save_job_id(self, job_id: str) -> None:
         try:
             self.job_id_file.write_text(job_id)
-            UserInterface.show_info(f"ID de simulación guardado en {self.job_id_file}")
+            UserInterface.show_success(
+                f"ID de simulación: {job_id[:8]}... (guardado en {self.job_id_file})"
+            )
         except Exception as e:
-            UserInterface.show_warning(f"Error guardando ID: {str(e)}")
+            UserInterface.show_error(f"Error guardando ID: {str(e)}")
 
     def load_last_job_id(self) -> Optional[str]:
         try:

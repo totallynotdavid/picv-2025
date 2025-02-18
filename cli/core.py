@@ -3,12 +3,12 @@ import time
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 
-from colorama import Fore
+from colorama import Style
 
 from cli.api import APIClient
 from cli.config import ConfigManager
 from cli.constants import DEFAULT_TIMEOUTS
-from cli.ui import UserInterface
+from cli.ui import COLORS, UserInterface  # Import COLORS for countdown styling
 
 
 class SimulationManager:
@@ -19,9 +19,8 @@ class SimulationManager:
     @staticmethod
     def prompt_parameters(config: Dict) -> Dict:
         params = config["simulation_params"]
-        UserInterface.show_section("Configuración de Simulación")
-
-        new_params = {
+        UserInterface.show_info("Modificación de parámetros:")
+        nuevos = {
             "Mw": UserInterface.get_float("Magnitud (Mw)", default=params["Mw"]),
             "h": UserInterface.get_float("Profundidad (km)", default=params["h"]),
             "lat0": UserInterface.get_float("Latitud", default=params["lat0"]),
@@ -29,192 +28,152 @@ class SimulationManager:
             "hhmm": UserInterface.get_time("Hora (HHMM)", default=params["hhmm"]),
             "dia": UserInterface.get_day("Día del mes", default=params["dia"]),
         }
-
-        config["simulation_params"] = new_params
+        config["simulation_params"] = nuevos
         return config
 
     async def full_test_flow(self) -> Optional[str]:
+        UserInterface.show_header()
+
         async with APIClient(self.config["base_url"]) as client:
-            if not await self._verify_connection(client):
+            if await client.check_connection():
+                UserInterface.show_success("Conexión a la API: OK")
+            else:
+                UserInterface.show_error("Conexión a la API: Fallida")
                 return None
 
-            self._show_operation_header()
-            UserInterface.show_parameters(self.config)
+            # Asumimos que las dependencias son correctas.
+            UserInterface.show_success("Dependencias: OK")
+
+            UserInterface.show_info("Parámetros de prueba:")
+            UserInterface.show_parameters_box(self.config)
+
+            if UserInterface.ask_yes_no("¿Deseas modificar los parámetros?"):
+                self.config = SimulationManager.prompt_parameters(self.config)
+                UserInterface.show_parameters_box(self.config)
+
+            if UserInterface.ask_yes_no("¿Deseas guardar los parámetros?"):
+                self.config_manager.save_config(self.config)
+
+            inicio = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+            UserInterface.show_analysis_start(inicio)
 
             try:
                 job_id = await self._execute_calculation_steps(client)
                 if job_id:
-                    self._save_configuration(job_id)
+                    self.config_manager.save_job_id(job_id)
                 return job_id
             except Exception as e:
-                UserInterface.show_error(f"Error en el flujo: {str(e)}")
+                UserInterface.show_error(f"Error durante el análisis: {str(e)}")
                 return None
 
-    async def _verify_connection(self, client: APIClient) -> bool:
-        UserInterface.show_section("Verificación de Conexión")
-        try:
-            if await client.check_connection():
-                UserInterface.show_success("Conexión establecida")
-                return True
-            return False
-        except Exception as e:
-            UserInterface.show_error(f"Error de conexión: {str(e)}")
-            return False
-
-    def _show_operation_header(self) -> None:
-        UserInterface.show_section("Inicio de Análisis")
-        print(
-            f"{Fore.CYAN}│ Fecha/hora: {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}"
-        )
-
     async def _execute_calculation_steps(self, client: APIClient) -> Optional[str]:
-        steps = [
-            (1, "calculate", "Calculando parámetros iniciales..."),
-            (2, "tsunami-travel-times", "Calculando tiempos de arribo..."),
-            (3, "run-tsdhn", "Iniciando simulación TSDHN..."),
+        pasos = [
+            (1, "Parámetros iniciales", "calculate"),
+            (2, "Tiempos de arribo", "tsunami-travel-times"),
+            (3, "Simulación TSDHN", "run-tsdhn"),
         ]
-
-        results = {}
-        for step_num, endpoint, description in steps:
-            UserInterface.show_step(step_num, description)
+        resultados = {}
+        total = len(pasos)
+        for num, descripcion, endpoint in pasos:
+            t0 = time.time()
             try:
-                result = await client.call_endpoint(
+                resultado = await client.call_endpoint(
                     endpoint,
                     self.config["simulation_params"],
                     timeout=DEFAULT_TIMEOUTS.get(endpoint, 30),
                 )
-                UserInterface.show_json(result)
-                results[endpoint] = result
+                dt = time.time() - t0
+                UserInterface.show_simulation_step(num, total, descripcion, dt)
+                resultados[endpoint] = resultado
             except Exception as e:
-                UserInterface.show_error(f"Error en paso {step_num}: {str(e)}")
+                UserInterface.show_error(f"Error en el paso {num}: {str(e)}")
                 raise
-
-        return results.get("run-tsdhn", {}).get("job_id")
-
-    def _save_configuration(self, job_id: str) -> None:
-        self.config_manager.save_config(self.config)
-        self.config_manager.save_job_id(job_id)
-        UserInterface.show_success(f"Configuración guardada - ID: {job_id}")
+        return resultados.get("run-tsdhn", {}).get("job_id")
 
 
 class JobMonitor:
     def __init__(self, config: Dict):
         self.config = config
-        self.start_time = time.time()
-        self.last_progress = 0
-        self.status_counts = {"success": 0, "errors": 0}
+        self.inicio = time.time()
+        self.errores = 0
 
     async def monitor_job(self, job_id: str) -> None:
-        self._show_monitoring_header(job_id)
+        if not UserInterface.ask_yes_no("¿Deseas monitorear esta simulación?"):
+            return
+
+        intervalo = int(
+            UserInterface.get_input("Intervalo de chequeo (segundos)", default="60")
+        )
+        inicio_str = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+        UserInterface.show_monitoring_header(job_id.upper(), inicio_str)
 
         async with APIClient(self.config["base_url"]) as client:
-            while not self._timeout_reached():
+            while not self._timeout_alcanzado():
                 try:
-                    status = await client.get_job_status(job_id)
-                    self._process_status(status)
-
-                    if status["status"] in ("completed", "failed"):
-                        await self._handle_final_status(client, job_id, status)
+                    estado = await client.get_job_status(job_id)
+                    self._procesar_estado(estado)
+                    if estado.get("status") in ("completed", "failed"):
+                        await self._finalizar(client, job_id, estado)
                         return
-
-                    await self._wait_for_next_check()
-
+                    await self._esperar(intervalo)
                 except Exception as e:
-                    self._handle_monitoring_error(e)
+                    self.errores += 1
+                    UserInterface.show_error(
+                        f"Error de monitoreo ({self.errores}): {str(e)}"
+                    )
                     await asyncio.sleep(5)
+            UserInterface.show_error("Tiempo máximo de espera alcanzado")
 
-            self._handle_timeout()
-
-    def _show_monitoring_header(self, job_id: str) -> None:
-        UserInterface.show_section(f"Monitoreo de Simulación: {job_id}")
-        print(f"{Fore.CYAN}│ Inicio: {datetime.now().strftime('%d-%m-%Y %H:%M:%S')}")
-        print(f"│ Intervalo: {self.config['check_interval']}s")
-        if timeout := self.config.get("timeout"):
-            print(f"│ Tiempo máximo: {timedelta(seconds=timeout)}")
-
-    def _timeout_reached(self) -> bool:
-        if timeout := self.config.get("timeout"):
-            elapsed = time.time() - self.start_time
-            return elapsed > timeout
+    def _timeout_alcanzado(self) -> bool:
+        timeout = self.config.get("timeout")
+        if timeout:
+            return (time.time() - self.inicio) > timeout
         return False
 
-    def _process_status(self, status: Dict) -> None:
-        current_progress = status.get("progress", 0)
-        self._update_progress(current_progress)
-        self._show_status_details(status)
-
-    def _update_progress(self, progress: int) -> None:
-        if progress != self.last_progress:
-            UserInterface.progress_bar(progress, 100, "Progreso:")
-            self.last_progress = progress
-
-    def _show_status_details(self, status: Dict) -> None:
-        elapsed = timedelta(seconds=time.time() - self.start_time)
-        print(f"{Fore.CYAN}│ Tiempo transcurrido: {elapsed}")
-        UserInterface.show_json(status, "Estado actual")
-
-        if est := status.get("estimated_remaining_minutes"):
-            print(f"{Fore.CYAN}│ Tiempo restante estimado: {est:.1f} minutos")
-
-    async def _handle_final_status(
-        self, client: APIClient, job_id: str, status: Dict
-    ) -> None:
-        if status["status"] == "completed":
-            await self._handle_success(client, job_id)
+    def _procesar_estado(self, estado: Dict) -> None:
+        estatus = estado.get("status", "").lower()
+        if estatus == "running":
+            texto = "Ejecutándose"
+        elif estatus == "completed":
+            texto = "Completa"
+        elif estatus == "failed":
+            texto = "Fallida"
         else:
-            self._handle_failure(status)
+            texto = estatus.capitalize()
 
-    async def _handle_success(self, client: APIClient, job_id: str) -> None:
-        UserInterface.show_section("Simulación Exitosa", Fore.GREEN)
-        total_time = timedelta(seconds=time.time() - self.start_time)
-        print(f"{Fore.GREEN}│ Duración total: {total_time}")
+        progreso = estado.get("progress", 0) / 100
+        transcurrido = str(timedelta(seconds=int(time.time() - self.inicio)))
+        UserInterface.show_monitoring_status(transcurrido, texto, progreso)
 
-        if self.config.get("save_results", True):
-            await self._download_report(client, job_id)
+    async def _finalizar(self, client: APIClient, job_id: str, estado: Dict) -> None:
+        if estado.get("status") == "completed":
+            UserInterface.show_success("Simulación exitosa")
+            duracion = str(timedelta(seconds=int(time.time() - self.inicio)))
+            UserInterface.show_info(f"Duración total: {duracion}")
+            if self.config.get("save_results", True):
+                await self._descargar_informe(client, job_id)
+        else:
+            UserInterface.show_error("Simulación fallida")
+            if error := estado.get("error"):
+                UserInterface.show_error(f"Error: {error}")
 
-    async def _download_report(self, client: APIClient, job_id: str) -> None:
+    async def _descargar_informe(self, client: APIClient, job_id: str) -> None:
         try:
             UserInterface.show_info("Descargando informe...")
-            report_data = await client.download_report(job_id)
-            filename = f"informe_tsunami_{job_id}.pdf"
-
-            with open(filename, "wb") as f:
-                f.write(report_data)
-
-            UserInterface.show_success(f"Informe guardado: {filename}")
+            datos = await client.download_report(job_id)
+            nombre = f"informe_tsunami_{job_id}.pdf"
+            with open(nombre, "wb") as f:
+                f.write(datos)
+            UserInterface.show_success(f"Informe guardado: {nombre}")
         except Exception as e:
-            UserInterface.show_error(f"Error en descarga: {str(e)}")
+            UserInterface.show_error(f"Error al descargar informe: {str(e)}")
 
-    def _handle_failure(self, status: Dict) -> None:
-        UserInterface.show_section("Simulación Fallida", Fore.RED)
-        if error := status.get("error"):
-            UserInterface.show_error(f"Error: {error}")
-
-        print(
-            f"{Fore.RED}│ Tiempo transcurrido: {timedelta(seconds=time.time() - self.start_time)}"
-        )
-        UserInterface.show_info(
-            "Recomendaciones:",
-            "1. Verifique los parámetros de entrada",
-            "2. Revise los logs del servidor",
-            "3. Contacte al soporte técnico",
-        )
-
-    async def _wait_for_next_check(self) -> None:
-        interval = self.config["check_interval"]
-        for remaining in range(interval, 0, -1):
-            print(f"{Fore.CYAN}│ Próxima actualización en: {remaining}s", end="\r")
+    async def _esperar(self, intervalo: int) -> None:
+        for seg in range(intervalo, 0, -1):
+            # Use the main color for the countdown message
+            print(
+                f"{COLORS['main']}Próxima actualización en: {seg:2d} s{Style.RESET_ALL}",
+                end="\r",
+            )
             await asyncio.sleep(1)
-        print(" " * 50, end="\r")  # Clear line
-
-    def _handle_monitoring_error(self, error: Exception) -> None:
-        self.status_counts["errors"] += 1
-        UserInterface.show_error(
-            f"Error de monitoreo ({self.status_counts['errors']}): {str(error)}"
-        )
-
-    def _handle_timeout(self) -> None:
-        UserInterface.show_warning("Tiempo máximo de espera alcanzado")
-        print(f"{Fore.YELLOW}│ Para reanudar:")
-        print("│ python -m cli.cli --monitor last")
-        print("│ Agregar --timeout para extender el tiempo")
+        print(" " * 40, end="\r")

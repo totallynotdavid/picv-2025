@@ -26,28 +26,25 @@ class APIClient:
     async def _request(self, method: str, endpoint: str, **kwargs) -> Any:
         url = f"{self.base_url}/{endpoint.lstrip('/')}"
         timeout = kwargs.pop("timeout", DEFAULT_TIMEOUTS.get(endpoint, 30))
-
         try:
             async with self._session.request(
                 method, url, timeout=aiohttp.ClientTimeout(total=timeout), **kwargs
             ) as response:
                 response.raise_for_status()
                 content_type = response.headers.get("Content-Type", "")
-
                 if "application/json" in content_type:
                     return await response.json()
                 if "text/" in content_type:
                     return await response.text()
                 return await response.read()
-
         except aiohttp.ClientResponseError as e:
-            UserInterface.show_error(f"HTTP Error {e.status}: {e.message}")
+            UserInterface.show_error(f"Error HTTP {e.status}: {e.message}")
             raise
         except asyncio.TimeoutError:
-            UserInterface.show_error("Request timed out")
+            UserInterface.show_error("Tiempo de espera agotado")
             raise
         except aiohttp.ClientError as e:
-            UserInterface.show_error(f"Connection error: {str(e)}")
+            UserInterface.show_error(f"Error de conexión: {str(e)}")
             raise
 
     async def check_connection(self) -> bool:
