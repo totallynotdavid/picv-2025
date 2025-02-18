@@ -464,7 +464,7 @@ Este comando prueba secuencialmente los endpoints `/calculate`, `/tsunami-travel
 
 La primera vez que el cliente se ejecute, se crearán automáticamente dos archivos:
 
-1. `configuracion_simulación.json`: Guarda los parámetros de la simulación para futuras referencias.
+1. `configuracion_simulacion.json`: Guarda los parámetros de la simulación para futuras referencias.
 2. `last_job_id.txt`: Guarda el identificador de la simulación para monitorear su progreso.
 
 Para monitorear el estado de una simulación específica, ejecuta:
