@@ -220,10 +220,10 @@ sudo apt update -y && sudo apt upgrade -y
 
    La API estará disponible en `http://localhost:8000`.
 
-   Si estás modificando el código y quieres que la aplicación se recargue automáticamente cuando hagas cambios, usa este comando:
+   Si estás modificando el código y quieres que la aplicación se recargue automáticamente cuando hagas cambios, entonces usa el siguiente comando en lugar de `poetry run start`:
 
    ```bash
-   poetry poe format
+   poetry poe dev
    ```
 
    En un terminal diferente, ejecuta el siguiente comando para iniciar el RQ worker:
