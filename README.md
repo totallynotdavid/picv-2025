@@ -434,7 +434,9 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
 
 ## Pruebas personalizadas
 
-Además de las [pruebas unitarias](orchestrator/tests/), hemos incluido un cliente de prueba ([`example.py`](example.py)) que permite evaluar el comportamiento del modelo en condiciones específicas. Antes de ejecutar el cliente, asegúrate de que **la API esté activa** en segundo plano. Verifica su disponibilidad con:
+Además de las [pruebas unitarias](orchestrator/tests/), hemos incluido un cliente de prueba ([`example.py`](example.py)) que permite evaluar el comportamiento del modelo en condiciones específicas.
+
+Antes de ejecutar el cliente, asegúrate de que **la API esté activa** en segundo plano. Verifica su disponibilidad con:
 
 ```bash
 curl -fsS http://localhost:8000/health
@@ -456,7 +458,6 @@ La primera vez que ejecutes el cliente, se crearán automáticamente dos archivo
 Para monitorear el estado de una simulación específica, ejecuta:
 
 ```bash
-# Monitorear por ID específico con intervalo personalizado
 poetry run python example.py --monitor <ID-simulación> --intervalo 300
 ```
 
