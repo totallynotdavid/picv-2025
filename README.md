@@ -255,7 +255,7 @@ picv-2025/
 
 El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz web](https://github.com/totallynotdavid/picv-2025-web).
 
-1. [`/calculate`](orchestrator/main.py?plain=1#L27) recibe los valores para la magnitud (Mw), profundidad (h) y coordenadas del epicentro. Luego, calcula la geometría de la ruptura, el momento sísmico y evalúa el riesgo de tsunami. Genera el archivo [`hypo.dat`](model/hypo.dat) requerido en pasos posteriores.
+1. [`POST /calculate`](orchestrator/main.py?plain=1#L27) recibe los valores para la magnitud (Mw), profundidad (h) y coordenadas del epicentro. Luego, calcula la geometría de la ruptura, el momento sísmico y evalúa el riesgo de tsunami. Genera el archivo [`hypo.dat`](model/hypo.dat) requerido en pasos posteriores.
 
    Los siguientes campos deben enviarse en el cuerpo de la solicitud en formato JSON:
 
@@ -271,7 +271,7 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
    Ten en cuenta que los modelos Pydantic (definidos en [`schemas.py`](orchestrator/models/schemas.py)) se encargan de validar y, en algunos casos, transformar estos parámetros para asegurar que el formato sea el correcto.
    <details>
    <summary>Ejemplo de solicitud</summary>
-   
+
    ```json
    {
      "Mw": 7.5,
@@ -282,11 +282,12 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
      "hhmm": "1430"
    }
    ```
-   
+
    </details>
 
    <details>
    <summary>Respuesta esperada</summary>
+
    ```json
    {
      "length": 575.44,
@@ -318,11 +319,13 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
      ]
    }
    ```
+
    </details>
 
-2. [`/tsunami-travel-times`](orchestrator/main.py?plain=1#L45) utiliza los mismos datos de entrada que `calculate` y realiza una serie de integraciones vectorizadas para calcular los tiempos de arribo a puertos predefinidos ([`puertos.txt`](/model/puertos.txt)). La respuesta es un objeto JSON que incluye tanto los tiempos de arribo como las distancias a cada estación.
+2. [`POST /tsunami-travel-times`](orchestrator/main.py?plain=1#L45) utiliza los mismos datos de entrada que `/calculate` y realiza una serie de integraciones vectorizadas para calcular los tiempos de arribo a puertos predefinidos en [`puertos.txt`](/model/puertos.txt). La respuesta es un objeto JSON que incluye tanto los tiempos de arribo como las distancias a cada estación.
 
-   Ejemplo de respuesta esperada:
+   <details>
+   <summary>Ejemplo de respuesta esperada:</summary>
 
    ```json
    {
@@ -351,12 +354,15 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
    }
    ```
 
-3. [`/run-tsdhn`](orchestrator/main.py?plain=1#L61) llama al script [`job.run`](model/job.run), que procesa [`hypo.dat`](model/hypo.dat) y genera resultados en 25 a 50 minutos (dependiendo de la capacidad del CPU). Produce:
+   </details>
+
+3. [`POST /run-tsdhn`](orchestrator/main.py?plain=1#L61) inicia el proceso TSDHN. Anteriormente llamaba al script [`job.run`](model/job.run). Inicialmente procesa [`hypo.dat`](model/hypo.dat). El tiempo de ejecución varía entre 25-50 minutos dependiendo de la carga del sistema. Produce:
 
    - [`salida.txt`](model/salida.txt): Tiempos de arribo brutos.
    - [`reporte.pdf`](model/reporte.pdf): Mapas de altura de olas, mareógrafos y parámetros técnicos.
 
-   Ejemplo de respuesta esperada:
+   <details>
+   <summary>Ejemplo de respuesta esperada:</summary>
 
    ```json
    {
@@ -366,18 +372,18 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
    }
    ```
 
+   </details>
+
    donde:
 
    - `status` indica el estado de la tarea. Puede ser `queued`, `running`, `completed` o `failed`.
    - `job_id` es el identificador único de la tarea.
    - `message` proporciona información adicional sobre el estado de la tarea.
 
-> [!WARNING]
-> Los endpoints deben invocarse en orden estricto: `/calculate` :arrow_right: `/tsunami-travel-times` :arrow_right: `/run-tsdhn`, ya que cada uno depende del resultado del anterior.
+4. [`GET /job-status/{job_id}`](orchestrator/main.py?plain=1#L134) retorna el ESTADO actual de una tarea en la cola de RQ. Se espera un objeto JSON con el ID de la tarea:
 
-4. [`/job-status/`](orchestrator/main.py?plain=1#L134) retorna el ESTADO actual de una tarea en la cola de RQ. Se espera un objeto JSON con el ID de la tarea:
-
-   Ejemplo de solicitud (`POST`):
+   <details>
+   <summary>Ejemplo de solicitud</summary>
 
    ```json
    {
@@ -385,7 +391,10 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
    }
    ```
 
-   Ejemplo de respuesta esperada:
+   </details>
+
+   <details>
+   <summary>Ejemplo de respuesta esperada</summary>
 
    ```json
    {
@@ -399,11 +408,15 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
    }
    ```
 
-5. [`/job-result/`](orchestrator/main.py?plain=1#L163) retorna el informe generado. Se espera un objeto JSON con el ID de la tarea: `localhost:8000/job-result/dee661ec-1c39-47e5-bb50-3926fa70bb8e`
+   </details>
 
-6. [`/health`](orchestrator/main.py?plain=1#L204) verifica la disponibilidad de la API.
+5. [`GET /job-result/{job_id}`](orchestrator/main.py?plain=1#L163) retorna el informe generado. Ejemplo de ruta:  
+   `http://localhost:8000/job-result/dee661ec-1c39-47e5-bb50-3926fa70bb8e`
 
-   Ejemplo de respuesta esperada:
+6. [`GET /health`](orchestrator/main.py?plain=1#L204) verifica la disponibilidad de la API.
+
+   <details>
+   <summary>Ejemplo de respuesta esperada</summary>
 
    ```json
    {
@@ -413,6 +426,8 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
      "queue": "connected"
    }
    ```
+
+   </details>
 
 ## Pruebas personalizadas
 
