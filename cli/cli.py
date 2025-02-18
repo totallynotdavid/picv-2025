@@ -9,13 +9,14 @@ from .ui import UserInterface
 
 
 def check_dependencies():
-    if importlib.util.find_spec("colorama") is None:
-        print("⚠️  Instala colorama para mejor experiencia: pip install colorama")
-
-
-def prompt_confirmation(message: str = "¿Continuar?") -> bool:
-    response = input(f"{message} (s/n): ").lower()
-    return response in {"s", "si", "sí"}
+    required = {"colorama", "aiohttp"}
+    missing = [pkg for pkg in required if importlib.util.find_spec(pkg) is None]
+    if missing:
+        UserInterface.show_warning(
+            f"Missing packages: {', '.join(missing)}\n"
+            f"Install with: pip install {' '.join(missing)}"
+        )
+        sys.exit(1)
 
 
 async def main():
@@ -36,25 +37,35 @@ async def main():
     parser.add_argument("--intervalo", type=int, help="Intervalo de verificación (s)")
     parser.add_argument("--timeout", type=int, help="Tiempo máximo de monitoreo (s)")
     parser.add_argument("--no-guardar", action="store_false", dest="save_results")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Mostrar detalles técnicos"
+    )
 
     args = parser.parse_args()
+
     cm = ConfigManager()
     config = cm.load_config()
+    UserInterface.set_verbose(args.verbose)
 
-    # Actualizar configuración con argumentos CLI
-    if args.url:
+    # Map CLI arguments to configuration keys
+    if args.url is not None:
         config["base_url"] = args.url
-    if args.intervalo:
+    if args.intervalo is not None:
         config["check_interval"] = args.intervalo
-    if args.timeout:
+    if args.timeout is not None:
         config["timeout"] = args.timeout
-    config["save_results"] = args.save_results
+    if args.save_results is not None:
+        config["save_results"] = args.save_results
 
     try:
         if args.test:
+            if UserInterface.confirm("¿Desea modificar los parámetros de simulación?"):
+                config = SimulationManager.prompt_parameters(config)
+
             manager = SimulationManager(config)
             job_id = await manager.full_test_flow()
-            if job_id and prompt_confirmation("¿Monitorizar esta simulación?"):
+
+            if job_id and UserInterface.confirm("¿Monitorizar esta simulación?"):
                 monitor = JobMonitor(config)
                 await monitor.monitor_job(job_id)
         else:
@@ -70,7 +81,7 @@ async def main():
             await monitor.monitor_job(job_id)
 
     except KeyboardInterrupt:
-        UserInterface.show_warning("\nOperación cancelada por el usuario")
+        UserInterface.show_warning("Operación cancelada por el usuario")
     except Exception as e:
         UserInterface.show_error(f"Error crítico: {str(e)}")
         sys.exit(1)
