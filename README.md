@@ -383,7 +383,7 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
    - Ejemplo de [`salida.txt`](model/salida.txt): Tiempos de arribo brutos.
    - Ejemplo de [`reporte.pdf`](model/reporte.pdf): Mapas de altura de olas, mareógrafos y parámetros técnicos.
 
-4. [`GET /job-status/{job_id}`](orchestrator/main.py?plain=1#L134) retorna el estado actual de una simulación en la cola del RQ worker. Se espera un objeto JSON con el ID de la simulación:
+4. [`GET /job-status/{job_id}`](orchestrator/main.py?plain=1#L134) retorna el estado actual de una simulación en la cola del RQ worker. Se espera un objeto JSON con el identificador de la simulación:
 
    <details>
    <summary>Ejemplo de solicitud</summary>
@@ -453,15 +453,15 @@ Este comando prueba secuencialmente los endpoints `/calculate`, `/tsunami-travel
 La primera vez que ejecutes el cliente, se crearán automáticamente dos archivos:
 
 1. `configuracion_simulación.json`: Guarda los parámetros de la simulación para futuras referencias.
-2. `last_job_id.txt`: Guarda el ID de la simulación para monitorear su progreso.
+2. `last_job_id.txt`: Guarda el identificador de la simulación para monitorear su progreso.
 
 Para monitorear el estado de una simulación específica, ejecuta:
 
 ```bash
-poetry run python example.py --monitor <ID-simulación> --intervalo 300
+poetry run python example.py --monitor <id-simulación> --intervalo 300
 ```
 
-El ID de la simulación se puede encontrar en `last_job_id.txt` o revisando los logs del RQ worker. Este comando verificará el progreso de la simulación pedida cada 300 segundos (5 minutos).
+El identificador de la simulación se puede encontrar en `last_job_id.txt` o revisando los logs del RQ worker. Este comando verificará el progreso de la simulación pedida cada 300 segundos (5 minutos).
 
 Si deseas reanudar la última simulación registrada, ejecuta:
 
