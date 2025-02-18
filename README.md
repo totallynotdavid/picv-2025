@@ -220,6 +220,9 @@ sudo apt update -y && sudo apt upgrade -y
    poetry run rq worker tsdhn_queue
    ```
 
+> [!TIP]
+> Si deseas probar el modelo con condiciones específicas, consulta la sección [Pruebas personalizadas](#pruebas-personalizadas).
+
 ## Estructura del proyecto
 
 El repositorio se organiza en dos componentes principales:
