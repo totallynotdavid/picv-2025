@@ -433,44 +433,76 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
 
 ## Pruebas personalizadas
 
-Además de las [pruebas unitarias](orchestrator/tests/), proporcionamos un script ([`example.py`](example.py)) para evaluar el comportamiento del modelo con parámetros personalizados. Para su uso, **la API debe estar activa** en segundo plano. Verifica su disponibilidad con:
+Además de las [pruebas unitarias](orchestrator/tests/), hemos incluido un cliente de prueba ([`example.py`](example.py)) que permite evaluar el comportamiento del modelo en condiciones específicas. Antes de ejecutar el cliente, asegúrate de que **la API esté activa** en segundo plano. Verifica su disponibilidad con:
 
 ```bash
 curl -fsS http://localhost:8000/health
 ```
 
-Para modificar los parámetros del evento sísmico, edita <kbd>earthquake_data</kbd> en [example.py](example.py?plain=1#L13). Luego, ejecuta:
+Si deseas configurar los parámetros de la simulación, edita los valores en <kbd>earthquake_data</kbd> en [example.py](example.py?plain=1#L13). Luego, ejecuta:
 
 ```bash
 poetry run python example.py --test
 ```
 
-Este comando prueba tres endpoints (`/calculate`, `/tsunami-travel-times`, `/run-tsdhn`) y almacena el ID de la tarea en `last_job_id.txt`. Al finalizar, el script preguntará si desea iniciar el monitoreo automático.
+Este comando prueba secuencialmente tres endpoints (`/calculate`, `/tsunami-travel-times`, `/run-tsdhn`).
 
-Para seguir el progreso de simulaciones existentes, utilice el argumento `--monitor` con cualquiera de estos formatos:
+La primera vez que ejecutes el cliente, se crearán automáticamente dos archivos:
+
+1. `configuracion_simulación.json`: Guarda los parámetros de la simulación para futuras referencias.
+2. `last_job_id.txt`: Guarda el ID de la simulación para monitorear su progreso.
+
+Para monitorear el estado de una simulación específica, ejecuta:
 
 ```bash
 # Monitorear por ID específico con intervalo personalizado
-poetry run python example.py --monitor <job-id> --interval 300
+poetry run python example.py --monitor <ID-simulación> --intervalo 300
+```
 
-# Usar último ID registrado con límite de tiempo máximo
+El ID de la simulación se puede encontrar en `last_job_id.txt` o revisando los logs en `rq`. Este comando verificará el progreso de la simulación pedida cada 300 segundos (5 minutos).
+
+Si deseas reanudar la última simulación registrada, ejecuta:
+
+```
 poetry run python example.py --monitor last --timeout 7200
 ```
 
-Puedes interrumpir el monitoreo sin afectar la simulación presionando <kbd>Ctrl+C</kbd>.
+Este comando monitorea la última simulación registrada por un máximo de 7200 segundos (2 horas).
+
+Los parámetros disponibles para la monitorización:
+
+- `--monitor`: Especifica el identificador de la simulación a monitorizar. Use "last" para la simulación más reciente.
+- `--interval`: Define el intervalo de verificación en segundos (predeterminado: 60).
+- `--timeout`: Establece el tiempo máximo de monitorización en segundos (opcional).
+- `--no-guardar`: Evita que se descargue y guarde automáticamente el informe de resultados.
+- `--url`: Especifica una URL base alternativa para la API (predeterminado: http://localhost:8000). Útil para pruebas en entornos remotos.
+
+También puedes ver los parámetros disponibles en el terminal con:
+
+```bash
+poetry run python example.py --help
+```
+
+> [!TIP]
+> La monitorización puede interrumpirse en cualquier momento presionando <kbd>Ctrl+C</kbd>, sin afectar la simulación en curso.
 
 ## Notas adicionales
 
 - La API guarda automáticamente algunos eventos en `tsunami_api.log`. Puedes configurar el logger en [`config.py`](/orchestrator/core/config.py) si deseas. El archivo de logs se crea cuando inicias la API.
 - Si estás haciendo pruebas y quieres ver los logs en tu terminal mientras usas `pytest`, solo necesitas cambiar una línea en [`pyproject.toml`](pyproject.toml):
+
   ```toml
   [tool.pytest.ini_options]
   log_cli = true
   ```
-  Te recomiendo usar `logger.debug()` en vez de `print()` o sino pytest lo ignorará.
+
+  Es recomendable usar `logger.debug()` en vez de `print()` o sino pytest lo ignorará.
+
 - Cuando termines de hacer cambios en el código, y antes de hacer commit, ejecuta:
+
   ```bash
   poetry run pytest
   poetry poe format
   ```
+
   para formatear el código y asegurarte de todo sigue funcionando correctamente.
