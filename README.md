@@ -356,10 +356,7 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
 
    </details>
 
-3. [`POST /run-tsdhn`](orchestrator/main.py?plain=1#L61) inicia el proceso TSDHN. Anteriormente llamaba al script [`job.run`](model/job.run). Inicialmente procesa [`hypo.dat`](model/hypo.dat). El tiempo de ejecución varía entre 25-50 minutos dependiendo de la carga del sistema. Produce:
-
-   - [`salida.txt`](model/salida.txt): Tiempos de arribo brutos.
-   - [`reporte.pdf`](model/reporte.pdf): Mapas de altura de olas, mareógrafos y parámetros técnicos.
+3. [`POST /run-tsdhn`](orchestrator/main.py?plain=1#L61) inicia el proceso TSDHN. Anteriormente llamaba al script [`job.run`](model/job.run). Inicialmente procesa [`hypo.dat`](model/hypo.dat). El tiempo de ejecución varía entre 25-50 minutos dependiendo de la carga del sistema.
 
    <details>
    <summary>Ejemplo de respuesta esperada</summary>
@@ -379,6 +376,11 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
    - `status` indica el estado de la tarea. Puede ser `queued`, `running`, `completed` o `failed`.
    - `job_id` es el identificador único de la tarea.
    - `message` proporciona información adicional sobre el estado de la tarea.
+
+   Internamente, el endpoint produce:
+
+   - Ejemplo de [`salida.txt`](model/salida.txt): Tiempos de arribo brutos.
+   - Ejemplo de [`reporte.pdf`](model/reporte.pdf): Mapas de altura de olas, mareógrafos y parámetros técnicos.
 
 4. [`GET /job-status/{job_id}`](orchestrator/main.py?plain=1#L134) retorna el ESTADO actual de una tarea en la cola de RQ. Se espera un objeto JSON con el ID de la tarea:
 
