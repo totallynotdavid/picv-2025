@@ -286,7 +286,7 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
    </details>
 
    <details>
-   <summary>Respuesta esperada</summary>
+   <summary>Ejemplo de respuesta esperada</summary>
 
    ```json
    {
