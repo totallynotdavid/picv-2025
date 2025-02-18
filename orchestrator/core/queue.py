@@ -348,3 +348,6 @@ class TSDHNJob:
         except Exception as e:
             logger.exception(f"Status check failed for job {job_id}")
             raise ValueError(f"Invalid job ID or system error: {str(e)}") from e
+
+
+tsdhn_queue = TSDHNJob()

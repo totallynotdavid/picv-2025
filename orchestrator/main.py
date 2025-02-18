@@ -1,42 +1,40 @@
 import logging
 from datetime import datetime
-from pathlib import Path
 from typing import Dict
 
+import anyio
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from orchestrator.core.calculator import TsunamiCalculator
-from orchestrator.core.config import LOGGING_CONFIG, MODEL_DIR
-from orchestrator.core.queue import JobStatus, TSDHNJob
+from orchestrator.core.config import LOGGING_CONFIG
+from orchestrator.core.queue import JobStatus, tsdhn_queue
 from orchestrator.models.schemas import (
     CalculationResponse,
     EarthquakeInput,
     RunTSDHNRequest,
     TsunamiTravelResponse,
 )
+from orchestrator.utils.job_validators import secure_path_construction, validate_job_id
 
 # Configure logging
 logging.basicConfig(**LOGGING_CONFIG)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="TSDHN API", version="0.1.0")
+app = FastAPI(title="TSDHN API", version="0.1.0", docs_url="/api-docs", redoc_url=None)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # TODO: Limit to specific domains
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 # Initialize services
 calculator = TsunamiCalculator()
-tsdhn_queue = TSDHNJob()
-
-skip_steps_default = Query(None)  # Used on /run-tsdhn endpoint to skip steps
 
 
 @app.post("/calculate", response_model=CalculationResponse)
@@ -62,14 +60,16 @@ async def calculate_endpoint(data: EarthquakeInput):
     """
     try:
         logger.info(
-            "Processing calculation request for earthquake at"
-            f" ({data.lat0}, {data.lon0})"
+            "Processing calculation request for earthquake",
+            extra={"lat": data.lat0, "lon": data.lon0},
         )
-        return calculator.calculate_earthquake_parameters(data)
+        return await anyio.to_thread.run_sync(
+            calculator.calculate_earthquake_parameters, data
+        )
     except Exception as e:
         logger.exception("Error in calculate_endpoint")
         raise HTTPException(
-            status_code=500, detail=f"Error calculating earthquake parameters: {str(e)}"
+            status_code=500, detail="Error processing calculation"
         ) from e
 
 
@@ -86,15 +86,16 @@ async def tsunami_travel_times_endpoint(data: EarthquakeInput):
     """
     try:
         logger.info(
-            "Calculating tsunami travel times for earthquake at"
-            f" ({data.lat0}, {data.lon0})"
+            "Calculating tsunami travel times",
+            extra={"lat": data.lat0, "lon": data.lon0},
         )
-
-        return calculator.calculate_tsunami_travel_times(data)
+        return await anyio.to_thread.run_sync(
+            calculator.calculate_tsunami_travel_times, data
+        )
     except Exception as e:
         logger.exception("Error in tsunami_travel_times_endpoint")
         raise HTTPException(
-            status_code=500, detail=f"Error calculating tsunami travel times: {str(e)}"
+            status_code=500, detail="Error calculating travel times"
         ) from e
 
 
@@ -103,9 +104,9 @@ async def run_tsdhn_endpoint(payload: RunTSDHNRequest):
     """
     Enqueue a TSDHN model execution job.
 
-    The model takes approximately 12 minutes to run on a fast server.
-    This endpoint returns immediately with a job ID that can be used
-    to check the execution status.
+    The TSDHN model takes approximately 25 minutes to run on a fast server.
+    Returns a job ID that can be used to check the execution
+    status later on or retrieve the results.
 
     Returns:
         Dict containing:
@@ -114,31 +115,23 @@ async def run_tsdhn_endpoint(payload: RunTSDHNRequest):
             - message: Status message
     """
     try:
-        skip_steps = payload.skip_steps
         logger.info("Enqueueing new TSDHN job")
-        if skip_steps:
-            logger.info(f"Skipping steps: {skip_steps}")
-            job_id = tsdhn_queue.enqueue_job(skip_steps=skip_steps)
-        else:
-            logger.info("No steps will be skipped.")
-            job_id = tsdhn_queue.enqueue_job()
+        job_id = tsdhn_queue.enqueue_job(skip_steps=payload.skip_steps)
         return {
             "status": "queued",
             "job_id": job_id,
-            "message": "TSDHN job has been queued successfully",
+            "message": "Job queued successfully",
         }
     except Exception as e:
-        logger.exception("Error queueing TSDHN job")
+        logger.exception("Job queuing failed")
         raise HTTPException(
-            status_code=500, detail=f"Error starting TSDHN job: {str(e)}"
+            status_code=500, detail="Error starting processing job"
         ) from e
 
 
 @app.get("/job-status/{job_id}")
 async def get_job_status_endpoint(job_id: str) -> Dict:
     """
-    Get the status of a TSDHN job.
-
     Args:
         job_id (str): The job identifier returned by /run-tsdhn
 
@@ -150,48 +143,39 @@ async def get_job_status_endpoint(job_id: str) -> Dict:
             - ended_at: Job completion timestamp (if completed)
     """
     try:
-        logger.debug(f"Checking status for job {job_id}")
+        logger.debug("Retrieving job status", extra={"job_id": job_id})
         return tsdhn_queue.get_job_status(job_id)
-    except ValueError as e:
-        logger.error(f"Job {job_id} not found")
-        raise HTTPException(status_code=404, detail=f"Job not found: {str(e)}") from e
     except Exception as e:
         logger.exception(f"Error checking status for job {job_id}")
         raise HTTPException(
-            status_code=500, detail=f"Error checking job status: {str(e)}"
+            status_code=500, detail="Error retrieving job status"
         ) from e
 
 
 @app.get("/job-result/{job_id}")
 async def get_job_result_endpoint(job_id: str):
     """
-    Get the result of a completed TSDHN job.
-
     Args:
         job_id (str): The job identifier returned by /run-tsdhn
 
     Returns:
         FileResponse: The generated PDF report
     """
-    try:
-        logger.info(f"Retrieving results for job {job_id}")
+    validate_job_id(job_id)
 
-        # Check job status
+    try:
         status = tsdhn_queue.get_job_status(job_id)
         if status["status"] != JobStatus.COMPLETED.value:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Job is not completed. Current status: {status['status']}",
-            )
+            raise HTTPException(status_code=400, detail="Job processing not complete")
 
-        # Check if report exists
-        job_work_dir = Path(MODEL_DIR).parent / "jobs" / job_id
-        report_path = job_work_dir / "reporte.pdf"
-        if not report_path.exists():
-            raise HTTPException(status_code=404, detail="Report file not found")
+        job_dir = secure_path_construction(job_id)
+        report_path = job_dir / "reporte.pdf"
+
+        if not await anyio.to_thread.run_sync(report_path.exists):
+            raise HTTPException(status_code=404, detail="Report not available")
 
         return FileResponse(
-            path=str(report_path),
+            path=report_path,
             filename=f"tsdhn_report_{job_id}.pdf",
             media_type="application/pdf",
         )
@@ -199,30 +183,23 @@ async def get_job_result_endpoint(job_id: str):
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Error retrieving results for job {job_id}")
+        logger.exception("Result retrieval error")
         raise HTTPException(
-            status_code=500, detail=f"Error retrieving job results: {str(e)}"
+            status_code=500, detail="Error retrieving job results"
         ) from e
 
 
 @app.get("/health")
 async def health_check():
-    """
-    Health check endpoint.
-
-    Returns:
-        Dict containing service status and current timestamp
-    """
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "calculator": "initialized",
-        "queue": "connected" if tsdhn_queue.redis.ping() else "disconnected",
+        "queue_status": "connected" if tsdhn_queue.redis.ping() else "disconnected",
     }
 
 
 def start_app():
-    """Start the FastAPI application using uvicorn."""
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
 
 
