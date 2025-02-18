@@ -374,16 +374,16 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
 
    donde:
 
-   - `status` indica el estado de la tarea. Puede ser `queued`, `running`, `completed` o `failed`.
-   - `job_id` es el identificador único de la tarea.
-   - `message` proporciona información adicional sobre el estado de la tarea.
+   - `status` indica el estado de la simulación. Puede ser `queued`, `running`, `completed` o `failed`.
+   - `job_id` es el identificador único de la simulación.
+   - `message` proporciona información adicional sobre el estado de la simulación.
 
    Internamente, el endpoint produce:
 
    - Ejemplo de [`salida.txt`](model/salida.txt): Tiempos de arribo brutos.
    - Ejemplo de [`reporte.pdf`](model/reporte.pdf): Mapas de altura de olas, mareógrafos y parámetros técnicos.
 
-4. [`GET /job-status/{job_id}`](orchestrator/main.py?plain=1#L134) retorna el ESTADO actual de una tarea en la cola del RQ worker. Se espera un objeto JSON con el ID de la tarea:
+4. [`GET /job-status/{job_id}`](orchestrator/main.py?plain=1#L134) retorna el estado actual de una simulación en la cola del RQ worker. Se espera un objeto JSON con el ID de la simulación:
 
    <details>
    <summary>Ejemplo de solicitud</summary>
