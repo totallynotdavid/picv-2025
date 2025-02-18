@@ -448,7 +448,7 @@ Si deseas configurar los parámetros de la simulación, edita los valores en <kb
 poetry run python example.py --test
 ```
 
-Este comando prueba secuencialmente tres endpoints (`/calculate`, `/tsunami-travel-times`, `/run-tsdhn`).
+Este comando prueba secuencialmente los endpoints `/calculate`, `/tsunami-travel-times` y `/run-tsdhn`. Una vez completada la inicialización, el cliente consulta al usuario si desea monitorear el progreso de la simulación. Para esto, se utilizan los endpoints `/job-status` y `/job-result`.
 
 La primera vez que ejecutes el cliente, se crearán automáticamente dos archivos:
 
