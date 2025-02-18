@@ -131,7 +131,7 @@ sudo apt update -y && sudo apt upgrade -y
    ```
 
 > [!NOTE]
-> El SDK usa GitLab para aprovechar su política de LFS gratuito y reducir la carga en los servidores de los autores durante pruebas CI/CD.
+> El SDK usa GitLab para aprovechar su política de LFS gratuito y para reducir la carga en los servidores de los autores durante pruebas CI/CD.
 
 4. [**TeXLive**](https://www.tug.org/texlive/quickinstall.html) es utilizado para la generación de los informes. Para simplificar el proceso, se opta por una instalación mínima. Ejecute:
 
@@ -142,7 +142,7 @@ sudo apt update -y && sudo apt upgrade -y
    cd install-tl-2*
    ```
 
-   Crea un perfil de instalación denominado <kbd>texlive.profile</kbd> con el siguiente contenido:
+   Crea un perfil de instalación (<kbd>texlive.profile</kbd>) con el siguiente contenido:
 
    ```bash
    cat > texlive.profile << EOF
