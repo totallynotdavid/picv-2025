@@ -214,7 +214,7 @@ sudo apt update -y && sudo apt upgrade -y
 
    La API estará disponible en `http://localhost:8000`.
 
-   En un terminal diferente, ejecuta el siguiente comando para iniciar el worker RQ:
+   En un terminal diferente, ejecuta el siguiente comando para iniciar el RQ worker:
 
    ```bash
    poetry run rq worker tsdhn_queue
@@ -383,7 +383,7 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
    - Ejemplo de [`salida.txt`](model/salida.txt): Tiempos de arribo brutos.
    - Ejemplo de [`reporte.pdf`](model/reporte.pdf): Mapas de altura de olas, mareógrafos y parámetros técnicos.
 
-4. [`GET /job-status/{job_id}`](orchestrator/main.py?plain=1#L134) retorna el ESTADO actual de una tarea en la cola de RQ. Se espera un objeto JSON con el ID de la tarea:
+4. [`GET /job-status/{job_id}`](orchestrator/main.py?plain=1#L134) retorna el ESTADO actual de una tarea en la cola del RQ worker. Se espera un objeto JSON con el ID de la tarea:
 
    <details>
    <summary>Ejemplo de solicitud</summary>
@@ -460,7 +460,7 @@ Para monitorear el estado de una simulación específica, ejecuta:
 poetry run python example.py --monitor <ID-simulación> --intervalo 300
 ```
 
-El ID de la simulación se puede encontrar en `last_job_id.txt` o revisando los logs del worker RQ. Este comando verificará el progreso de la simulación pedida cada 300 segundos (5 minutos).
+El ID de la simulación se puede encontrar en `last_job_id.txt` o revisando los logs del RQ worker. Este comando verificará el progreso de la simulación pedida cada 300 segundos (5 minutos).
 
 Si deseas reanudar la última simulación registrada, ejecuta:
 
