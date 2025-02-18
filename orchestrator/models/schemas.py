@@ -42,3 +42,7 @@ class TsunamiTravelResponse(BaseModel):
     arrival_times: Dict[str, str]
     distances: Dict[str, float]
     epicenter_info: Dict[str, str]
+
+
+class RunTSDHNRequest(BaseModel):
+    skip_steps: Optional[List[str]] = None

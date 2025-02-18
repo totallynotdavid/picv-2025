@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query
@@ -13,6 +13,7 @@ from orchestrator.core.queue import JobStatus, TSDHNJob
 from orchestrator.models.schemas import (
     CalculationResponse,
     EarthquakeInput,
+    RunTSDHNRequest,
     TsunamiTravelResponse,
 )
 
@@ -97,7 +98,7 @@ async def tsunami_travel_times_endpoint(data: EarthquakeInput):
 
 
 @app.post("/run-tsdhn")
-async def run_tsdhn_endpoint(skip_steps: Optional[List[str]] = skip_steps_default):
+async def run_tsdhn_endpoint(payload: RunTSDHNRequest):
     """
     Enqueue a TSDHN model execution job.
 
@@ -112,6 +113,7 @@ async def run_tsdhn_endpoint(skip_steps: Optional[List[str]] = skip_steps_defaul
             - message: Status message
     """
     try:
+        skip_steps = payload.skip_steps
         logger.info("Enqueueing new TSDHN job")
         if skip_steps:
             logger.info(f"Skipping steps: {skip_steps}")
