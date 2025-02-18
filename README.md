@@ -1,6 +1,6 @@
 # Orchestrator-TSDHN
 
-El Orchestrator-TSDHN es una herramienta para la estimación de parámetros de tsunamis de origen lejano mediante simulaciones numéricas. Combina el **modelo TSDHN escrito en Fortran** (ubicado en la carpeta [`/model`](/model/)) con una **API escrita en Python** ([`/orchestrator`](/orchestrator/)) que procesa datos sísmicos iniciales, como ubicación y magnitud de terremotos, para calcular variables como: dimensiones de ruptura sísmica, momento sísmico y desplazamiento de la corteza. Estas variables son utilizadas finalmente en la simulación principal, cuyo resultado incluye un informe en formato PDF con mapas de propagación, gráficos de mareógrafos y datos técnicos, además de un archivo de texto con tiempos de arribo a estaciones costeras.
+El Orchestrator-TSDHN es una herramienta para la estimación de parámetros de tsunamis de origen lejano mediante simulaciones numéricas. Combina el **modelo TSDHN escrito en Fortran** (en la carpeta [`/model`](/model/)) con una **API escrita en Python** (en la carpeta [`/orchestrator`](/orchestrator/)) que procesa datos sísmicos iniciales, como ubicación y magnitud de terremotos, para calcular variables como: dimensiones de ruptura sísmica, momento sísmico y desplazamiento de la corteza. Estas variables son utilizadas finalmente en la simulación principal, cuyo resultado incluye un informe en formato PDF con mapas de propagación, gráficos de mareógrafos y datos técnicos, además de un archivo de texto con tiempos de arribo a estaciones costeras.
 
 > [!IMPORTANT]
 > La lógica de los cálculos numéricos reside en este repositorio, mientras que la [interfaz web](https://github.com/totallynotdavid/picv-2025-web) (que gestiona solicitudes y entrega el informe al usuario final) opera en un entorno separado.
@@ -116,7 +116,7 @@ sudo apt update -y && sudo apt upgrade -y
    poetry --version
    ```
 
-3. El software [**TTT SDK**](https://www.geoware-online.com/tsunami.html) (Tsunami Travel Time) calcula los tiempos de arribo de un tsunami a partir de la batimetría de una cuadrícula geográfica (el océano Pacífico en nuestro caso). Para instalarlo, necesitas `git-lfs` para clonar los archivos de datos grandes del repositorio y `cmake` para compilar e instalar el software:
+3. [**TTT SDK**](https://www.geoware-online.com/tsunami.html) (Tsunami Travel Time) calcula los tiempos de arribo de un tsunami a partir de la batimetría de una cuadrícula geográfica (el océano Pacífico en nuestro caso). Para instalarlo, necesitas `git-lfs` para clonar los archivos de datos grandes del repositorio y `cmake` para compilar e instalar el software:
 
    ```bash
    sudo apt install -y git-lfs cmake
@@ -131,9 +131,9 @@ sudo apt update -y && sudo apt upgrade -y
    ```
 
 > [!NOTE]
-> El SDK usa GitLab para aprovechar su política de LFS gratuito y reducir la carga en los servidores de los autores durante pruebas CI/CD.
+> El SDK usa GitLab para aprovechar su política de LFS gratuito y para reducir la carga en los servidores de los autores durante pruebas CI/CD.
 
-4. **TeXLive** es utilizado para la generación de los informes. Para simplificar el proceso, se opta por una instalación mínima. Ejecute:
+4. [**TeXLive**](https://www.tug.org/texlive/quickinstall.html) es utilizado para la generación de los informes. Para simplificar el proceso, se opta por una instalación mínima. Ejecute:
 
    ```bash
    cd /tmp
@@ -142,7 +142,7 @@ sudo apt update -y && sudo apt upgrade -y
    cd install-tl-2*
    ```
 
-   Crea un perfil de instalación denominado <kbd>texlive.profile</kbd> con el siguiente contenido:
+   Crea un perfil de instalación (<kbd>texlive.profile</kbd>) con el siguiente contenido:
 
    ```bash
    cat > texlive.profile << EOF
@@ -214,13 +214,14 @@ sudo apt update -y && sudo apt upgrade -y
 
    La API estará disponible en `http://localhost:8000`.
 
-   En un terminal diferente, ejecuta el siguiente comando para iniciar el worker RQ:
+   En un terminal diferente, ejecuta el siguiente comando para iniciar el RQ worker:
 
    ```bash
    poetry run rq worker tsdhn_queue
    ```
 
-   Asegúrate de ejecutar `rq worker tsdhn_queue` dentro del entorno de Poetry para garantizar el acceso a todas las dependencias necesarias.
+> [!TIP]
+> Si deseas probar el modelo con condiciones específicas, consulta la sección de [pruebas personalizadas](#pruebas-personalizadas).
 
 ## Estructura del proyecto
 
@@ -247,29 +248,30 @@ picv-2025/
     └── salida.txt                # Archivo de salida con datos del epicentro y tiempos de arribo.
 ```
 
-## Flujo de procesamiento
+## Endpoints de la API
 
 > [!WARNING]
-> El modelo solo procesa magnitudes entre Mw 6.5 y Mw 9.5. Valores fuera de este rango resultarán en un error.
+> El modelo solo procesa magnitudes entre **Mw 6.5 y Mw 9.5**. Valores fuera de este rango resultarán en un error. Los siguientes endpoints deben invocarse en **orden secuencial estricto**:  
+> `/calculate` → `/tsunami-travel-times` → `/run-tsdhn`.
 
-El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz web](https://github.com/totallynotdavid/picv-2025-web). La API gestiona los siguientes endpoints:
+El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz web](https://github.com/totallynotdavid/picv-2025-web).
 
-1. [`/calculate`](orchestrator/main.py?plain=1#L27) recibe los valores para la magnitud (Mw), profundidad (h) y coordenadas del epicentro. Luego, calcula la geometría de la ruptura, el momento sísmico y evalúa el riesgo de tsunami. Genera el archivo [`hypo.dat`](model/hypo.dat) que se usará en la simulación.
+1. [`POST /calculate`](orchestrator/main.py?plain=1#L27) recibe los valores para la magnitud (Mw), profundidad (h) y coordenadas del epicentro. Luego, calcula la geometría de la ruptura, el momento sísmico y evalúa el riesgo de tsunami. Genera el archivo [`hypo.dat`](model/hypo.dat) requerido en pasos posteriores.
 
    Los siguientes campos deben enviarse en el cuerpo de la solicitud en formato JSON:
 
-   | Parámetro | Descripción                | Unidad         |
-   | --------- | -------------------------- | -------------- |
-   | `Mw`      | Magnitud momento sísmico   | Adimensional   |
-   | `h`       | Profundidad del hipocentro | km             |
-   | `lat0`    | Latitud del epicentro      | grados         |
-   | `lon0`    | Longitud del epicentro     | grados         |
-   | `dia`     | Día del mes del evento     | string         |
-   | `hhmm`    | Hora y minutos del evento  | formato `HHMM` |
+   | Parámetro | Descripción                | Unidad              |
+   | --------- | -------------------------- | ------------------- |
+   | `Mw`      | Magnitud momento sísmico   | adimensional        |
+   | `h`       | Profundidad del hipocentro | km                  |
+   | `lat0`    | Latitud del epicentro      | grados              |
+   | `lon0`    | Longitud del epicentro     | grados              |
+   | `dia`     | Día del mes del evento     | string (ej. `"15"`) |
+   | `hhmm`    | Hora y minutos del evento  | formato `HHMM`      |
 
    Ten en cuenta que los modelos Pydantic (definidos en [`schemas.py`](orchestrator/models/schemas.py)) se encargan de validar y, en algunos casos, transformar estos parámetros para asegurar que el formato sea el correcto.
-
-   Un ejemplo de solicitud (`POST`):
+   <details>
+   <summary>Ejemplo de solicitud</summary>
 
    ```json
    {
@@ -282,71 +284,227 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
    }
    ```
 
-   Respuesta esperada:
+   </details>
+
+   <details>
+   <summary>Ejemplo de respuesta esperada</summary>
 
    ```json
    {
-     "length": 120.5,
-     "width": 80.3,
-     "dislocation": 2.5,
-     "seismic_moment": 3.2e20,
-     "tsunami_warning": "Alerta de tsunami para costas cercanas",
-     "distance_to_coast": 45.2,
-     "azimuth": 18.5,
-     "dip": 30.0,
-     "epicenter_location": "mar"
+     "length": 575.44,
+     "width": 144.54,
+     "dislocation": 10.64,
+     "seismic_moment": 3.98e22,
+     "tsunami_warning": "Genera un Tsunami grande y destructivo",
+     "distance_to_coast": 10439.47,
+     "azimuth": 247.0,
+     "dip": 18.0,
+     "epicenter_location": "mar",
+     "rectangle_parameters": {
+       "L1": 575439.94,
+       "W1": 137469.49,
+       "beta": 13.44,
+       "alfa": -23.0,
+       "h1": 591632.47,
+       "a1": -49.15,
+       "b1": 291.7,
+       "xo": -153.35,
+       "yo": 56.45
+     },
+     "rectangle_corners": [
+       { "lon": -153.35, "lat": 56.45 },
+       { "lon": -158.11, "lat": 54.42 },
+       { "lon": -158.6, "lat": 55.56 },
+       { "lon": -153.83, "lat": 57.58 },
+       { "lon": -153.35, "lat": 56.45 }
+     ]
    }
    ```
 
-2. [`/tsunami-travel-times`](orchestrator/main.py?plain=1#L45) utiliza los mismos datos de entrada y realiza una serie de integraciones vectorizadas para calcular los tiempos de arribo a puertos predefinidos ([`puertos.txt`](/model/puertos.txt)). La respuesta es un objeto JSON que incluye tanto los tiempos de arribo como las distancias a cada estación.
-3. [`/run-tsdhn`](orchestrator/main.py?plain=1#L61) llama al script [`job.run`](model/job.run), que procesa [`hypo.dat`](model/hypo.dat) y genera resultados en ~12 minutos (en un procesador de 8 núcleos). Produce:
+   </details>
 
-   - [`salida.txt`](model/salida.txt): Tiempos de arribo brutos.
-   - [`reporte.pdf`](model/reporte.pdf): Mapas de altura de olas, mareógrafos y parámetros técnicos.
+2. [`POST /tsunami-travel-times`](orchestrator/main.py?plain=1#L45) utiliza los mismos datos de entrada que `/calculate` y realiza una serie de integraciones vectorizadas para calcular los tiempos de arribo a puertos predefinidos en [`puertos.txt`](/model/puertos.txt). La respuesta es un objeto JSON que incluye tanto los tiempos de arribo como las distancias a cada estación.
 
-> [!WARNING]
-> Los endpoints deben invocarse en orden estricto: `/calculate` :arrow_right: `/tsunami-travel-times` :arrow_right: `/run-tsdhn`, ya que cada uno depende del resultado del anterior.
+   <details>
+   <summary>Ejemplo de respuesta esperada</summary>
+
+   ```json
+   {
+     "arrival_times": {
+       "-80.5876  -03.": "12:09 23Feb",
+       "-81.2827  -04.": "12:12 23Feb",
+       "__comment": "Otros puertos omitidos por brevedad",
+       "-70.3232  -18.": "14:40 23Feb"
+     },
+
+     "distances": {
+       "-80.5876  -03.": 9445.79,
+       "-81.2827  -04.": 9491.94,
+       "__comment": "Otros puertos omitidos por brevedad",
+       "-70.3232  -18.": 11438.3
+     },
+
+     "epicenter_info": {
+       "date": "23",
+       "time": "0000",
+       "latitude": "56.00",
+       "longitude": "-156.00",
+       "depth": "12",
+       "magnitude": "9.0"
+     }
+   }
+   ```
+
+   </details>
+
+3. [`POST /run-tsdhn`](orchestrator/main.py?plain=1#L61) inicia el proceso TSDHN. Anteriormente llamaba al script [`job.run`](model/job.run). Inicialmente procesa [`hypo.dat`](model/hypo.dat). El tiempo de ejecución varía entre 25-50 minutos dependiendo de la carga del sistema.
+
+   <details>
+   <summary>Ejemplo de respuesta esperada</summary>
+
+   ```json
+   {
+     "status": "queued",
+     "job_id": "dee661ec-1c39-47e5-bb50-3926fa70bb8e",
+     "message": "TSDHN job has been queued successfully"
+   }
+   ```
+
+   </details>
+
+   donde:
+
+   - `status` indica el estado de la simulación. Puede ser `queued`, `running`, `completed` o `failed`.
+   - `job_id` es el identificador único de la simulación.
+   - `message` proporciona información adicional sobre el estado de la simulación.
+
+   Internamente, el endpoint produce:
+
+   - Ejemplo de [`salida.txt`](model/salida.txt): Tiempos de arribo brutos.
+   - Ejemplo de [`reporte.pdf`](model/reporte.pdf): Mapas de altura de olas, mareógrafos y parámetros técnicos.
+
+4. [`GET /job-status/{job_id}`](orchestrator/main.py?plain=1#L134) retorna el estado actual de una simulación en la cola del RQ worker. Se espera un objeto JSON con el identificador de la simulación:
+
+   <details>
+   <summary>Ejemplo de solicitud</summary>
+
+   ```json
+   {
+     "job_id": "dee661ec-1c39-47e5-bb50-3926fa70bb8e"
+   }
+   ```
+
+   </details>
+
+   <details>
+   <summary>Ejemplo de respuesta esperada</summary>
+
+   ```json
+   {
+     "status": "completed",
+     "details": "Generating final report",
+     "error": null,
+     "created_at": "2025-02-17T19:46:08.171522",
+     "started_at": "2025-02-17T19:46:08.345851",
+     "ended_at": "2025-02-17T20:27:44.304036",
+     "report_path": "/jobs/dee661ec-1c39-47e5-bb50-3926fa70bb8e/reporte.pdf"
+   }
+   ```
+
+   </details>
+
+5. [`GET /job-result/{job_id}`](orchestrator/main.py?plain=1#L163) retorna el informe generado. Ejemplo de uso:  
+   `http://localhost:8000/job-result/dee661ec-1c39-47e5-bb50-3926fa70bb8e`
+
+6. [`GET /health`](orchestrator/main.py?plain=1#L204) verifica la disponibilidad de la API.
+
+   <details>
+   <summary>Ejemplo de respuesta esperada</summary>
+
+   ```json
+   {
+     "status": "healthy",
+     "timestamp": "2025-02-17T16:22:45.133492",
+     "calculator": "initialized",
+     "queue": "connected"
+   }
+   ```
+
+   </details>
 
 ## Pruebas personalizadas
 
-Además de las [pruebas unitarias](orchestrator/tests/), proporcionamos un script ([`example.py`](example.py)) para evaluar el comportamiento del modelo con parámetros personalizados. Para su uso, **la API debe estar activa** en segundo plano. Verifica su disponibilidad con:
+Además de las [pruebas unitarias](orchestrator/tests/), hemos incluido un cliente de prueba ([`example.py`](example.py)) que permite evaluar el comportamiento del modelo en condiciones específicas.
+
+Antes de ejecutar el cliente, asegúrate de que **la API esté activa** en segundo plano. Verifica su disponibilidad con:
 
 ```bash
 curl -fsS http://localhost:8000/health
 ```
 
-Para modificar los parámetros del evento sísmico, edita <kbd>earthquake_data</kbd> en [example.py](example.py?plain=1#L13). Luego, ejecuta:
+Si deseas configurar los parámetros de la simulación, edita los valores en [example.py](example.py?plain=1#L65). Luego, ejecuta:
 
 ```bash
 poetry run python example.py --test
 ```
 
-Este comando prueba tres endpoints (`/calculate`, `/tsunami-travel-times`, `/run-tsdhn`) y almacena el ID de la tarea en `last_job_id.txt`. Al finalizar, el script preguntará si desea iniciar el monitoreo automático.
+Este comando prueba secuencialmente los endpoints `/calculate`, `/tsunami-travel-times` y `/run-tsdhn`. Una vez completada la inicialización, el cliente consultará al usuario si desea monitorear el progreso de la simulación. Para esto, se utilizan los endpoints `/job-status` y `/job-result`.
 
-Para seguir el progreso de simulaciones existentes, utilice el argumento `--monitor` con cualquiera de estos formatos:
+La primera vez que el cliente se ejecute, se crearán automáticamente dos archivos:
+
+1. `configuracion_simulación.json`: Guarda los parámetros de la simulación para futuras referencias.
+2. `last_job_id.txt`: Guarda el identificador de la simulación para monitorear su progreso.
+
+Para monitorear el estado de una simulación específica, ejecuta:
 
 ```bash
-# Monitorear por ID específico con intervalo personalizado
-poetry run python example.py --monitor <job-id> --interval 300
+poetry run python example.py --monitor <id-simulación> --intervalo 300
+```
 
-# Usar último ID registrado con límite de tiempo máximo
+El identificador de la simulación se puede encontrar en `last_job_id.txt` o revisando los logs del RQ worker. Este comando verificará el progreso de la simulación pedida cada 300 segundos (5 minutos).
+
+Si deseas reanudar la última simulación registrada, ejecuta:
+
+```
 poetry run python example.py --monitor last --timeout 7200
 ```
 
-Puedes interrumpir el monitoreo sin afectar la simulación presionando <kbd>Ctrl+C</kbd>.
+Este comando monitorea la última simulación registrada por un máximo de 7200 segundos (2 horas).
+
+Los parámetros disponibles para la monitorización:
+
+- `--monitor`: Especifica el identificador de la simulación a monitorizar. Use "`last`" para la simulación más reciente.
+- `--interval`: Define el intervalo de verificación en segundos (predeterminado: `60`).
+- `--timeout`: Establece el tiempo máximo de monitorización en segundos (opcional).
+- `--no-guardar`: Evita que se descargue y guarde automáticamente el informe de resultados.
+- `--url`: Especifica una URL base alternativa para la API (predeterminado: http://localhost:8000). Útil para pruebas en entornos remotos.
+
+También puedes ver los parámetros disponibles en el terminal con:
+
+```bash
+poetry run python example.py --help
+```
+
+> [!TIP]
+> La monitorización puede interrumpirse en cualquier momento presionando <kbd>Ctrl+C</kbd>, sin afectar la simulación en curso.
 
 ## Notas adicionales
 
 - La API guarda automáticamente algunos eventos en `tsunami_api.log`. Puedes configurar el logger en [`config.py`](/orchestrator/core/config.py) si deseas. El archivo de logs se crea cuando inicias la API.
 - Si estás haciendo pruebas y quieres ver los logs en tu terminal mientras usas `pytest`, solo necesitas cambiar una línea en [`pyproject.toml`](pyproject.toml):
+
   ```toml
   [tool.pytest.ini_options]
   log_cli = true
   ```
-  Te recomiendo usar `logger.debug()` en vez de `print()` o sino pytest lo ignorará.
+
+  Es recomendable usar `logger.debug()` en vez de `print()` o sino pytest lo ignorará.
+
 - Cuando termines de hacer cambios en el código, y antes de hacer commit, ejecuta:
+
   ```bash
   poetry run pytest
   poetry poe format
   ```
+
   para formatear el código y asegurarte de todo sigue funcionando correctamente.
