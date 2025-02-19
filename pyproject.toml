@@ -68,6 +68,6 @@ indent-style = "space"
 line-ending = "auto"
 
 [tool.poe.tasks]
-dev = { shell = "uvicorn orchestrator.main:app --reload" }
+dev = { shell = "uvicorn orchestrator.main:app --reload --reload-dir orchestrator" }
 db = { shell = "rq worker tsdhn_queue" }
 format = { shell = "ruff format && ruff check --fix" }
