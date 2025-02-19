@@ -18,13 +18,22 @@ class SimulationManager:
         SimpleUI.print_header()
 
         async with APIClient(self.config["base_url"]) as client:
+            current_base_url = self.config.get("base_url", "http://localhost:8000")
+            nuevo_base_url = input(
+                f"◇  Base URL (actual: {current_base_url}): "
+            ).strip()
+            if nuevo_base_url:
+                self.config["base_url"] = nuevo_base_url
+
+            SimpleUI.show_info("")
+
             if await client.check_connection():
                 SimpleUI.show_success("Conexión a la API: OK")
             else:
                 SimpleUI.show_error("Conexión a la API: Fallida")
                 return None
 
-            SimpleUI.show_info("")  # Empty line with "│"
+            SimpleUI.show_info("")
 
             SimpleUI.show_success("Parámetros de simulación:")
             SimpleUI.show_info(
@@ -53,10 +62,8 @@ class SimulationManager:
             SimpleUI.show_info("")
 
             self.modify_parameters()
+            self.config_manager.save_config(self.config)
 
-            SimpleUI.show_success(
-                f"Los parámetros se guardaron en: {self.config_manager.config_file}"
-            )
             SimpleUI.show_info("")
 
             inicio = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
