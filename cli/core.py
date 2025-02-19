@@ -26,7 +26,6 @@ class SimulationManager:
 
             SimpleUI.show_info("")  # Empty line with "│"
 
-            # Display simulation parameters.
             SimpleUI.show_success("Parámetros de simulación:")
             SimpleUI.show_info(
                 "   * Magnitud (Mw): "
@@ -64,7 +63,6 @@ class SimulationManager:
             SimpleUI.show_success(f"Análisis iniciado [{inicio}]")
             SimpleUI.show_info("")
 
-            # Execute endpoints sequentially.
             job_id = await self._execute_calculation_steps(client)
             return job_id
 
@@ -91,10 +89,8 @@ class SimulationManager:
                             )
                             continue
                     self.config["simulation_params"][key] = nuevo
-            SimpleUI.show_info("")
-        else:
-            # If not modifying, still print an empty line.
-            SimpleUI.show_info("")
+
+        SimpleUI.show_info("")
 
         current_interval = self.config.get("check_interval", 60)
         new_interval = input(
@@ -139,7 +135,7 @@ class SimulationManager:
         SimpleUI.show_info("")
         job_id = resultados.get("run-tsdhn", {}).get("job_id")
         if job_id:
-            SimpleUI.show_success(f"ID de simulación: {job_id[:8]}...")
+            SimpleUI.show_success(f"ID de simulación: {job_id}")
         SimpleUI.show_info("")
         return job_id
 
@@ -167,7 +163,6 @@ class JobMonitor:
             last_api_check = time.time()
             final_state = None
 
-            # Create the live display with an initial Text object.
             with Live(
                 Text(f"◇  Estado: {status} | Tiempo transcurrido: 0:00:00"),
                 refresh_per_second=4,
@@ -178,7 +173,7 @@ class JobMonitor:
                 while not finished:
                     now = time.time()
                     elapsed = int(now - self.start_time)
-                    # Check API status every 'intervalo' seconds.
+
                     if now - last_api_check >= intervalo:
                         try:
                             estado = await client.get_job_status(self.job_id)
@@ -190,7 +185,7 @@ class JobMonitor:
                         except Exception:
                             status = "Error"
                         last_api_check = now
-                    # Update the live display.
+
                     live.update(
                         Text(
                             f"◇  Estado: {status} | "
