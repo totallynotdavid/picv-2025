@@ -12,6 +12,8 @@ from redis.exceptions import ConnectionError
 from rq import Queue, get_current_job
 from rq.job import Job
 
+from orchestrator.modules.reporte import generate_reports
+
 logger = logging.getLogger(__name__)
 
 
@@ -150,6 +152,13 @@ def validate_files(cwd: Path, checks: List[Tuple[str, str]]) -> None:
         raise FileNotFoundError(f"Missing files:\n{error_details}")
 
 
+def validate_pdf(filepath: Path) -> None:
+    if not filepath.exists():
+        raise FileNotFoundError(f"PDF file {filepath} not found")
+    if filepath.stat().st_size < 1024:
+        raise ValueError(f"PDF file {filepath} seems corrupted")
+
+
 def process_step(step: ProcessingStep, working_dir: Path) -> None:
     logger.info(f"Processing step: {step.name}")
 
@@ -181,13 +190,13 @@ def check_dependencies() -> None:
 
 def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
     job = get_current_job()
+    job_work_dir = None
     try:
-        # Setup job context
         if job:
             job.meta.update(
                 {
                     "status": JobStatus.RUNNING.value,
-                    "details": "Initializing job environment",
+                    "details": "Initializing environment",
                 }
             )
             job.save_meta()
@@ -198,19 +207,19 @@ def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
         # Setup isolated workspace
         repo_root = Path(__file__).resolve().parent.parent.parent
         base_model_dir = repo_root / "model"
-        job_work_dir = base_model_dir.parent / "jobs" / job_id
+        job_work_dir = repo_root / "jobs" / job_id
 
         if job_work_dir.exists():
             shutil.rmtree(job_work_dir)
         shutil.copytree(base_model_dir, job_work_dir)
 
-        logger.info(f"Using isolated workspace: {job_work_dir}")
+        logger.info(f"Processing job {job_id} in {job_work_dir}")
         skip_steps = skip_steps or []
 
         # Validate skip_steps parameter
         all_steps = [step.name for step in PROCESSING_PIPELINE + TTT_MUNDO_STEPS]
         if invalid := set(skip_steps) - set(all_steps):
-            raise ValueError(f"Invalid steps to skip: {invalid}")
+            raise ValueError(f"Invalid skip steps: {invalid}")
 
         # Main processing pipeline
         for step in PROCESSING_PIPELINE:
@@ -224,7 +233,7 @@ def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
 
             process_step(step, job_work_dir)
 
-        # TTT Mundo processing
+        # Process TTT Mundo steps
         ttt_mundo_dir = job_work_dir / "ttt_mundo"
         for step in TTT_MUNDO_STEPS:
             if step.name in skip_steps:
@@ -237,55 +246,64 @@ def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
 
             process_step(step, ttt_mundo_dir)
 
-        # Final report generation
+        # Generate final reports
         if job:
-            job.meta["details"] = "Generating final report"
+            job.meta["details"] = "Generating report"
             job.save_meta()
 
-        report_config = CompilerConfig("reporte.f90", "reporte")
-        compile_fortran(job_work_dir, report_config)
-        make_executable(job_work_dir / "reporte")
+        validate_files(
+            job_work_dir,
+            [
+                ("meca.dat", "Seismic data missing"),
+                ("ttt_max.dat", "Tsunami timing data missing"),
+            ],
+        )
 
-        subprocess.run(["./reporte"], cwd=job_work_dir, check=True)
-        validate_files(job_work_dir, [("salida.txt", "Report text output missing")])
+        generate_reports(job_work_dir)
 
-        subprocess.run(["pdflatex", "reporte.tex"], cwd=job_work_dir, check=True)
-        validate_files(job_work_dir, [("reporte.pdf", "PDF report not generated")])
+        # Compile LaTeX report
+        for _ in range(2):
+            subprocess.run(
+                ["pdflatex", "-interaction=nonstopmode", "reporte.tex"],
+                cwd=job_work_dir,
+                check=True,
+                stdout=subprocess.DEVNULL,
+            )
 
-        # Cleanup temporary files
-        for f in ["reporte.aux", "reporte.log"]:
+        # Validate and clean up
+        validate_pdf(job_work_dir / "reporte.pdf")
+        for f in ["reporte.aux", "reporte.out", "reporte.log", "reporte.tex"]:
             (job_work_dir / f).unlink(missing_ok=True)
 
-        download_url = f"/job-result/{job_id}"
         result = {
             "status": JobStatus.COMPLETED.value,
             "job_id": job_id,
-            "download_url": download_url,
+            "download_url": f"/job-result/{job_id}",
         }
 
         if job:
             job.meta.update(result)
-            job.meta["status"] = JobStatus.COMPLETED.value
-            job.meta["details"] = "Job completed successfully"
+            job.meta["details"] = "Completed successfully"
             job.save_meta()
 
         return result
 
     except Exception as e:
-        logger.exception(f"Job {job_id} failed")
-        error_msg = f"{type(e).__name__}: {str(e)}"
-
+        logger.exception(f"Job {job_id} failed: {str(e)}")
         if job:
             job.meta.update(
                 {
                     "status": JobStatus.FAILED.value,
-                    "error": error_msg,
-                    "details": f"Failed at step: {job.meta.get('details')}",
+                    "error": f"{type(e).__name__}: {str(e)}",
+                    "details": f"Failed at: {job.meta.get('details')}",
                 }
             )
             job.save_meta()
 
-        raise RuntimeError(error_msg) from e
+        if job_work_dir and job_work_dir.exists():
+            shutil.rmtree(job_work_dir, ignore_errors=True)
+
+        raise RuntimeError(f"Job failed: {str(e)}") from e
 
 
 class TSDHNJob:
@@ -304,7 +322,7 @@ class TSDHNJob:
             # Validate steps before queuing
             all_steps = [step.name for step in PROCESSING_PIPELINE + TTT_MUNDO_STEPS]
             if invalid := set(skip_steps or []) - set(all_steps):
-                raise ValueError(f"Invalid steps to skip: {invalid}")
+                raise ValueError(f"Invalid skip steps: {invalid}")
 
             job_id = str(uuid.uuid4())
             self.queue.enqueue(
@@ -318,36 +336,33 @@ class TSDHNJob:
             )
             return job_id
         except ConnectionError:
-            logger.error("Failed to connect to Redis")
+            logger.error("Redis connection failed")
             raise
         except Exception as e:
             logger.exception("Job enqueue failed")
-            raise RuntimeError(f"Job submission failed: {str(e)}") from e
+            raise RuntimeError(f"Enqueue failed: {str(e)}") from e
 
     def get_job_status(self, job_id: str) -> Dict:
         try:
             job = Job.fetch(job_id, connection=self.redis)
-            status = job.get_status()
-
             status_map = {
                 "queued": JobStatus.QUEUED.value,
                 "started": JobStatus.RUNNING.value,
                 "finished": JobStatus.COMPLETED.value,
                 "failed": JobStatus.FAILED.value,
             }
-
             return {
-                "status": status_map.get(status, JobStatus.QUEUED.value),
+                "status": status_map.get(job.get_status(), JobStatus.QUEUED.value),
                 "details": job.meta.get("details"),
                 "error": job.meta.get("error"),
+                "download_url": job.meta.get("download_url"),
                 "created_at": job.created_at.isoformat() if job.created_at else None,
                 "started_at": job.started_at.isoformat() if job.started_at else None,
                 "ended_at": job.ended_at.isoformat() if job.ended_at else None,
-                "download_url": job.meta.get("download_url"),
             }
         except Exception as e:
-            logger.exception(f"Status check failed for job {job_id}")
-            raise ValueError(f"Invalid job ID or system error: {str(e)}") from e
+            logger.exception(f"Status check failed for {job_id}")
+            raise ValueError(f"Invalid job ID: {str(e)}") from e
 
 
 tsdhn_queue = TSDHNJob()

@@ -15,7 +15,7 @@ class APIClient:
     async def __aenter__(self):
         self._session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=30),
-            connector=aiohttp.TCPConnector(limit_per_host=5),
+            connector=aiohttp.TCPConnector(limit_per_host=5, force_close=True),
         )
         return self
 

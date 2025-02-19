@@ -1,4 +1,5 @@
 htmlcov/
 model/
+jobs/
 .ruff_cache/
 .pytest_cache/

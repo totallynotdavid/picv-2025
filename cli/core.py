@@ -10,8 +10,9 @@ from cli.ui import SimpleUI
 
 
 class SimulationManager:
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, dev_mode: bool = False):
         self.config = config
+        self.dev_mode = dev_mode  # Store the developer flag
         self.config_manager = ConfigManager()
 
     async def full_test_flow(self) -> Optional[str]:
@@ -74,7 +75,9 @@ class SimulationManager:
             return job_id
 
     def modify_parameters(self):
-        respuesta = input("◇  ¿Deseas modificar los parámetros? ").strip().lower()
+        respuesta = (
+            input("◇  ¿Deseas modificar los parámetros? (s/n): ").strip().lower()
+        )
         if respuesta == "s":
             for key, label in [
                 ("Mw", "Magnitud (Mw)"),
@@ -98,6 +101,24 @@ class SimulationManager:
                     self.config["simulation_params"][key] = nuevo
 
         SimpleUI.show_info("")
+
+        # Only prompt for skip steps if in developer mode
+        if self.dev_mode:
+            skip_input = input(
+                "◇  [Dev] ¿Deseas omitir algún paso? "
+                "(Ingresa los pasos separados por comas): ",
+            ).strip()
+            if skip_input:
+                self.config["skip_steps"] = [
+                    step.strip() for step in skip_input.split(",") if step.strip()
+                ]
+            else:
+                self.config["skip_steps"] = []
+
+            SimpleUI.show_info("")
+        else:
+            # For non-developers, simply set skip_steps to empty or default
+            self.config["skip_steps"] = []
 
         current_interval = self.config.get("check_interval", 60)
         new_interval = input(
@@ -124,10 +145,19 @@ class SimulationManager:
         total = len(pasos)
         for num, descripcion, endpoint in pasos:
             t0 = time.time()
+
+            # Prepare the payload based on the endpoint:
+            if endpoint == "run-tsdhn":
+                payload = {**self.config["simulation_params"]}
+                if self.config.get("skip_steps"):
+                    payload["skip_steps"] = self.config["skip_steps"]
+            else:
+                payload = self.config["simulation_params"]
+
             try:
                 resultado = await client.call_endpoint(
                     endpoint,
-                    self.config["simulation_params"],
+                    payload,
                     timeout=DEFAULT_TIMEOUTS.get(endpoint, 30),
                 )
                 dt = time.time() - t0
