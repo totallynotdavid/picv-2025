@@ -51,26 +51,24 @@ class SimulationManager:
             SimpleUI.show_info(
                 "   * Día: " + str(self.config["simulation_params"].get("dia", "N/D"))
             )
-            SimpleUI.show_info("")  # Empty line
+            SimpleUI.show_info("")
 
-            # Ask for modifications inline.
             self.modify_parameters()
 
             SimpleUI.show_success(
                 f"Los parámetros se guardaron en: {self.config_manager.config_file}"
             )
-            SimpleUI.show_info("")  # Empty line
+            SimpleUI.show_info("")
 
             inicio = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
             SimpleUI.show_success(f"Análisis iniciado [{inicio}]")
-            SimpleUI.show_info("")  # Empty line
+            SimpleUI.show_info("")
 
             # Execute endpoints sequentially.
             job_id = await self._execute_calculation_steps(client)
             return job_id
 
     def modify_parameters(self):
-        # Ask inline if the user wants to modify the parameters.
         respuesta = input("◇  ¿Deseas modificar los parámetros? ").strip().lower()
         if respuesta == "s":
             for key, label in [
@@ -93,16 +91,17 @@ class SimulationManager:
                             )
                             continue
                     self.config["simulation_params"][key] = nuevo
-            # Print an empty line after modifying parameters.
             SimpleUI.show_info("")
         else:
             # If not modifying, still print an empty line.
             SimpleUI.show_info("")
 
+        current_interval = self.config.get("check_interval", 60)
         new_interval = input(
             "◇  Intervalo de actualización para monitoreo (segundos) "
-            f"(actual: {self.config.get('check_interval', 60)}): "
+            f"(actual: {current_interval}): "
         ).strip()
+
         if new_interval:
             try:
                 self.config["check_interval"] = int(new_interval)
@@ -137,7 +136,6 @@ class SimulationManager:
                 SimpleUI.show_error(f"Error en el paso {num}: {str(e)}")
                 raise
 
-        # Print an empty line after the endpoints block
         SimpleUI.show_info("")
         job_id = resultados.get("run-tsdhn", {}).get("job_id")
         if job_id:
