@@ -5,9 +5,9 @@ from cli.core import JobMonitor, SimulationManager
 from cli.ui import SimpleUI
 
 
-async def main():
+async def main(args):
     config = ConfigManager().load_config()
-    sim = SimulationManager(config)
+    sim = SimulationManager(config, dev_mode=args.dev)
     job_id = await sim.full_test_flow()
     if job_id:
         monitor = JobMonitor(config, job_id)
