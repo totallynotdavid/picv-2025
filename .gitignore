@@ -4,6 +4,7 @@
 *.txt
 *.log
 *.json
+*.pdf
 
 .coverage
 /jobs/
