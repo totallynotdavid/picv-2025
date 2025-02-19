@@ -1,0 +1,53 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage{latexsym}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{graphicx}
+\usepackage{booktabs}
+
+\title{@title}
+\author{@author}
+\frenchspacing
+
+\begin{document}
+\maketitle
+
+\section*{Introducción}
+Este reporte preliminar de tsunami de origen lejano ha sido elaborado de forma automática.
+
+\section*{Parámetros Hipocentrales y Mecanismo Focal}
+\begin{table}[h!]
+\centering
+\begin{tabular}{lcc}
+\toprule
+Parámetro & & Valor \\
+\midrule
+Latitud     & & @lat\ $^\circ$ \\
+Longitud    & & @lon\ $^\circ$ \\
+Profundidad & & @depth\ km \\
+Magnitud    & & @magnitude \\
+\midrule
+Strike      & & @strike\ $^\circ$ \\
+Dip         & & @dip\ $^\circ$ \\
+Rake        & & @rake\ $^\circ$ \\
+\bottomrule
+\end{tabular}
+\caption{Parámetros hipocentrales y mecanismo focal del terremoto.}
+\end{table}
+
+\section*{Tsunami en Estaciones Seleccionadas}
+\begin{table}[h!]
+\centering
+\begin{tabular}{lcc}
+\toprule
+Estación & Tiempo de Arribo & Máximo (m) \\
+\midrule
+@station1_name & @station1_time & @station1_max \\
+@station2_name & @station2_time & @station2_max \\
+@station3_name & @station3_time & @station3_max \\
+\bottomrule
+\end{tabular}
+\caption{Tiempos de arribo y amplitudes máximas en estaciones seleccionadas.}
+\end{table}
+
+\end{document}
