@@ -6,7 +6,7 @@ from typing import Dict, Optional
 from cli.api import APIClient
 from cli.config import ConfigManager
 from cli.constants import DEFAULT_TIMEOUTS
-from cli.ui import RichUI
+from cli.ui import SimpleUI
 
 
 class SimulationManager:
@@ -14,55 +14,103 @@ class SimulationManager:
         self.config = config
         self.config_manager = ConfigManager()
 
-    @staticmethod
-    def prompt_parameters(config: Dict) -> Dict:
-        params = config["simulation_params"]
-        RichUI.show_info("Modificación de parámetros:")
-        nuevos = {
-            "Mw": RichUI.prompt_float("Magnitud (Mw)", default=params["Mw"]),
-            "h": RichUI.prompt_float("Profundidad (km)", default=params["h"]),
-            "lat0": RichUI.prompt_float("Latitud", default=params["lat0"]),
-            "lon0": RichUI.prompt_float("Longitud", default=params["lon0"]),
-            "hhmm": RichUI.prompt_time("Hora (HHMM)", default=params["hhmm"]),
-            "dia": RichUI.prompt_day("Día del mes", default=params["dia"]),
-        }
-        config["simulation_params"] = nuevos
-        return config
-
     async def full_test_flow(self) -> Optional[str]:
-        RichUI.print_header()
+        SimpleUI.print_header()
 
         async with APIClient(self.config["base_url"]) as client:
             if await client.check_connection():
-                RichUI.show_success("Conexión a la API: OK")
+                SimpleUI.show_success("Conexión a la API: OK")
             else:
-                RichUI.show_error("Conexión a la API: Fallida")
+                SimpleUI.show_error("Conexión a la API: Fallida")
                 return None
 
-            # Asumimos que las dependencias son correctas.
-            RichUI.show_success("Dependencias: OK")
+            SimpleUI.show_info("")  # Empty line with "│"
 
-            RichUI.show_info("Parámetros de prueba:")
-            RichUI.show_parameters_box(self.config)
+            # Display simulation parameters.
+            SimpleUI.show_success("Parámetros de simulación:")
+            SimpleUI.show_info(
+                "   * Magnitud (Mw): "
+                + str(self.config["simulation_params"].get("Mw", "N/D"))
+            )
+            SimpleUI.show_info(
+                "   * Profundidad (km): "
+                + str(self.config["simulation_params"].get("h", "N/D"))
+            )
+            SimpleUI.show_info(
+                "   * Latitud: "
+                + str(self.config["simulation_params"].get("lat0", "N/D"))
+            )
+            SimpleUI.show_info(
+                "   * Longitud: "
+                + str(self.config["simulation_params"].get("lon0", "N/D"))
+            )
+            SimpleUI.show_info(
+                "   * Hora (UTC): "
+                + str(self.config["simulation_params"].get("hhmm", "N/D"))
+            )
+            SimpleUI.show_info(
+                "   * Día: " + str(self.config["simulation_params"].get("dia", "N/D"))
+            )
+            SimpleUI.show_info("")  # Empty line
 
-            if RichUI.prompt_yes_no("¿Deseas modificar los parámetros?"):
-                self.config = SimulationManager.prompt_parameters(self.config)
-                RichUI.show_parameters_box(self.config)
+            # Ask for modifications inline.
+            self.modify_parameters()
 
-            if RichUI.prompt_yes_no("¿Deseas guardar los parámetros?"):
-                self.config_manager.save_config(self.config)
+            SimpleUI.show_success(
+                f"Los parámetros se guardaron en: {self.config_manager.config_file}"
+            )
+            SimpleUI.show_info("")  # Empty line
 
             inicio = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-            RichUI.show_analysis_start(inicio)
+            SimpleUI.show_success(f"Análisis iniciado [{inicio}]")
+            SimpleUI.show_info("")  # Empty line
 
+            # Execute endpoints sequentially.
+            job_id = await self._execute_calculation_steps(client)
+            return job_id
+
+    def modify_parameters(self):
+        # Ask inline if the user wants to modify the parameters.
+        respuesta = input("◇  ¿Deseas modificar los parámetros? ").strip().lower()
+        if respuesta == "s":
+            for key, label in [
+                ("Mw", "Magnitud (Mw)"),
+                ("h", "Profundidad (km)"),
+                ("lat0", "Latitud"),
+                ("lon0", "Longitud"),
+                ("hhmm", "Hora (UTC)"),
+                ("dia", "Día"),
+            ]:
+                current_val = self.config["simulation_params"].get(key)
+                nuevo = input(f"│     * {label} (actual: {current_val}): ").strip()
+                if nuevo:
+                    if key in ["Mw", "h", "lat0", "lon0"]:
+                        try:
+                            nuevo = float(nuevo)
+                        except ValueError:
+                            SimpleUI.show_error(
+                                "Valor inválido, se mantiene el valor actual"
+                            )
+                            continue
+                    self.config["simulation_params"][key] = nuevo
+            # Print an empty line after modifying parameters.
+            SimpleUI.show_info("")
+        else:
+            # If not modifying, still print an empty line.
+            SimpleUI.show_info("")
+
+        new_interval = input(
+            "◇  Intervalo de actualización para monitoreo (segundos) "
+            f"(actual: {self.config.get('check_interval', 60)}): "
+        ).strip()
+        if new_interval:
             try:
-                job_id = await self._execute_calculation_steps(client)
-                if job_id:
-                    self.config_manager.save_job_id(job_id)
-                return job_id
-            except Exception as e:
-                RichUI.show_error(f"Error durante el análisis: {str(e)}")
-                return None
+                self.config["check_interval"] = int(new_interval)
+            except ValueError:
+                SimpleUI.show_error(
+                    "Valor inválido para intervalo, se mantiene el valor actual"
+                )
+        SimpleUI.show_info("")
 
     async def _execute_calculation_steps(self, client: APIClient) -> Optional[str]:
         pasos = [
@@ -81,98 +129,108 @@ class SimulationManager:
                     timeout=DEFAULT_TIMEOUTS.get(endpoint, 30),
                 )
                 dt = time.time() - t0
-                RichUI.show_simulation_step(num, total, descripcion, dt)
+                SimpleUI.show_success(
+                    f"[Endpoint {num}/{total}] {descripcion}... ({dt:.1f}s)"
+                )
                 resultados[endpoint] = resultado
             except Exception as e:
-                RichUI.show_error(f"Error en el paso {num}: {str(e)}")
+                SimpleUI.show_error(f"Error en el paso {num}: {str(e)}")
                 raise
-        return resultados.get("run-tsdhn", {}).get("job_id")
+
+        # Print an empty line after the endpoints block
+        SimpleUI.show_info("")
+        job_id = resultados.get("run-tsdhn", {}).get("job_id")
+        if job_id:
+            SimpleUI.show_success(f"ID de simulación: {job_id[:8]}...")
+        SimpleUI.show_info("")
+        return job_id
 
 
 class JobMonitor:
-    def __init__(self, config: Dict, job_id: str):
+    def __init__(self, config: dict, job_id: str):
         self.config = config
         self.job_id = job_id
         self.start_time = time.time()
-        self.errors = 0
 
     async def monitor_job(self) -> None:
-        if not RichUI.prompt_yes_no("¿Deseas monitorear esta simulación?"):
-            return
+        from rich.console import Console
+        from rich.live import Live
+        from rich.text import Text
 
-        intervalo = int(
-            RichUI.prompt_input("Intervalo de chequeo (segundos)", default="60")
-        )
-
-        # Import InteractiveMonitor here to avoid circular dependency issues.
-        from cli.ui import InteractiveMonitor
-
-        monitor_ui = InteractiveMonitor(
-            simulation_id=self.job_id, start_time=self.start_time
-        )
-
-        # Inicia la interfaz interactiva en segundo plano.
-        monitor_task = asyncio.create_task(monitor_ui.run())
-
+        intervalo = self.config.get("check_interval", 60)
+        console = Console()
+        status = "Queued"
         async with APIClient(self.config["base_url"]) as client:
-            finished = False
-            while not finished and not monitor_ui.exit_requested:
-                try:
-                    estado = await client.get_job_status(self.job_id)
-                    self._procesar_estado(estado, monitor_ui)
-                    if estado.get("status") in ("completed", "failed"):
-                        await self._finalizar(client, estado, monitor_ui)
-                        finished = True
-                    else:
-                        await self._esperar(intervalo, monitor_ui)
-                except Exception as e:
-                    self.errors += 1
-                    monitor_ui.latest_event = (
-                        f"Error de monitoreo ({self.errors}): {str(e)}"
-                    )
-                    await asyncio.sleep(5)
-            monitor_ui.running = False  # Señala a la UI que debe detenerse.
-            await monitor_task
+            try:
+                estado = await client.get_job_status(self.job_id)
+                status = self._map_status(estado.get("status", "Queued"))
+            except Exception:
+                status = "Error"
+            last_api_check = time.time()
+            final_state = None
 
-    def _procesar_estado(self, estado: Dict, monitor_ui) -> None:
+            # Create the live display with an initial Text object.
+            with Live(
+                Text(f"◇  Estado: {status} | Tiempo transcurrido: 0:00:00"),
+                refresh_per_second=4,
+                console=console,
+                transient=False,
+            ) as live:
+                finished = False
+                while not finished:
+                    now = time.time()
+                    elapsed = int(now - self.start_time)
+                    # Check API status every 'intervalo' seconds.
+                    if now - last_api_check >= intervalo:
+                        try:
+                            estado = await client.get_job_status(self.job_id)
+                            raw_status = estado.get("status", "Queued")
+                            status = self._map_status(raw_status)
+                            if raw_status in ("completed", "failed"):
+                                finished = True
+                                final_state = estado
+                        except Exception:
+                            status = "Error"
+                        last_api_check = now
+                    # Update the live display.
+                    live.update(
+                        Text(
+                            f"◇  Estado: {status} | "
+                            f"Tiempo transcurrido: {self._format_elapsed(elapsed)}"
+                        )
+                    )
+                    await asyncio.sleep(1)
+            await self._finalizar(client, final_state)
+
+    def _format_elapsed(self, seconds: int) -> str:
+        return str(timedelta(seconds=seconds))
+
+    def _map_status(self, raw_status: str) -> str:
         status_map = {
+            "queued": "Queued",
             "running": "Ejecutándose",
             "completed": "Completa",
             "failed": "Fallida",
         }
-        estatus_raw = estado.get("status", "").lower()
-        texto = status_map.get(estatus_raw, estatus_raw.capitalize())
-        progreso = estado.get("progress", 0) / 100.0
-        elapsed = str(timedelta(seconds=int(time.time() - self.start_time)))
-        monitor_ui.status = texto
-        monitor_ui.progress = progreso
-        monitor_ui.elapsed = elapsed
+        return status_map.get(raw_status.lower(), raw_status.capitalize())
 
-    async def _finalizar(self, client: APIClient, estado: Dict, monitor_ui) -> None:
+    async def _finalizar(self, client: APIClient, estado: dict) -> None:
+        duration = self._format_elapsed(int(time.time() - self.start_time))
         if estado.get("status") == "completed":
-            monitor_ui.latest_event = "Simulación exitosa"
-            duracion = str(timedelta(seconds=int(time.time() - self.start_time)))
-            RichUI.show_success(f"Simulación exitosa - Duración total: {duracion}")
+            SimpleUI.show_success(f"Simulación completada - Duración total: {duration}")
             if self.config.get("save_results", True):
-                await self._descargar_informe(client, monitor_ui)
+                await self._descargar_informe(client)
         else:
-            monitor_ui.latest_event = "Simulación fallida"
-            RichUI.show_error("Simulación fallida")
+            SimpleUI.show_error("Simulación fallida")
             if error := estado.get("error"):
-                RichUI.show_error(f"Error: {error}")
+                SimpleUI.show_error(f"Error: {error}")
 
-    async def _descargar_informe(self, client: APIClient, monitor_ui) -> None:
+    async def _descargar_informe(self, client: APIClient) -> None:
         try:
-            monitor_ui.latest_event = "Descargando informe..."
             datos = await client.download_report(self.job_id)
             nombre = f"informe_tsunami_{self.job_id}.pdf"
             with open(nombre, "wb") as f:
                 f.write(datos)
-            RichUI.show_success(f"Informe guardado: {nombre}")
+            SimpleUI.show_success(f"Informe guardado: {nombre}")
         except Exception as e:
-            RichUI.show_error(f"Error al descargar informe: {str(e)}")
-
-    async def _esperar(self, intervalo: int, monitor_ui) -> None:
-        for seg in range(intervalo, 0, -1):
-            monitor_ui.countdown = seg
-            await asyncio.sleep(1)
+            SimpleUI.show_error(f"Error al descargar informe: {str(e)}")

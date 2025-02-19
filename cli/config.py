@@ -2,7 +2,7 @@ import json
 from typing import Dict, Optional
 
 from cli.constants import CONFIG_FILE, DEFAULT_CONFIG, JOB_ID_FILE
-from cli.ui import RichUI
+from cli.ui import SimpleUI
 
 
 class ConfigManager:
@@ -16,25 +16,23 @@ class ConfigManager:
                 with self.config_file.open("r", encoding="utf-8") as f:
                     return {**DEFAULT_CONFIG, **json.load(f)}
         except Exception as e:
-            RichUI.show_error(f"Error cargando configuración: {str(e)}")
+            SimpleUI.show_error(f"Error cargando configuración: {str(e)}")
         return DEFAULT_CONFIG
 
     def save_config(self, config: Dict) -> None:
         try:
             with self.config_file.open("w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
-            RichUI.show_success(f"Configuración guardada: {self.config_file}")
+            SimpleUI.show_success(f"Los parámetros se guardaron en: {self.config_file}")
         except Exception as e:
-            RichUI.show_error(f"Error guardando configuración: {str(e)}")
+            SimpleUI.show_error(f"Error guardando configuración: {str(e)}")
 
     def save_job_id(self, job_id: str) -> None:
         try:
             self.job_id_file.write_text(job_id)
-            RichUI.show_success(
-                f"ID de simulación: {job_id[:8]}... (guardado en {self.job_id_file})"
-            )
+            SimpleUI.show_success(f"ID de simulación: {job_id}")
         except Exception as e:
-            RichUI.show_error(f"Error guardando ID: {str(e)}")
+            SimpleUI.show_error(f"Error guardando ID: {str(e)}")
 
     def load_last_job_id(self) -> Optional[str]:
         try:
@@ -44,5 +42,5 @@ class ConfigManager:
                 else None
             )
         except Exception as e:
-            RichUI.show_error(f"Error leyendo ID: {str(e)}")
+            SimpleUI.show_error(f"Error leyendo ID: {str(e)}")
             return None
