@@ -74,7 +74,9 @@ class SimulationManager:
             return job_id
 
     def modify_parameters(self):
-        respuesta = input("◇  ¿Deseas modificar los parámetros? ").strip().lower()
+        respuesta = (
+            input("◇  ¿Deseas modificar los parámetros? (s/n): ").strip().lower()
+        )
         if respuesta == "s":
             for key, label in [
                 ("Mw", "Magnitud (Mw)"),
@@ -96,6 +98,18 @@ class SimulationManager:
                             )
                             continue
                     self.config["simulation_params"][key] = nuevo
+
+        SimpleUI.show_info("")
+
+        skip_input = input(
+            "◇  ¿Deseas omitir algún paso? (Ingresa los nombres separados por comas): "
+        ).strip()
+        if skip_input:
+            self.config["skip_steps"] = [
+                step.strip() for step in skip_input.split(",") if step.strip()
+            ]
+        else:
+            self.config["skip_steps"] = []
 
         SimpleUI.show_info("")
 
