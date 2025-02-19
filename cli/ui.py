@@ -1,39 +1,35 @@
-from typing import Dict, Optional
+import asyncio
+from datetime import datetime
 
-from colorama import Fore, Style, init
+from rich.console import Console
+from rich.layout import Layout
+from rich.panel import Panel
+from rich.prompt import Confirm, Prompt
 
-init(autoreset=True)
-
-# Usamos solo tres colores:
-COLORS = {
-    "main": Fore.CYAN,
-    "success": Fore.GREEN,
-    "error": Fore.RED,
-}
-
-# Íconos simples
-ICONS = {
-    "header": "🌊",
-    "check": "✓",
-    "error": "✗",
-}
+console = Console()
 
 
-class UserInterface:
-    _verbose = False
-
-    @classmethod
-    def set_verbose(cls, verbose: bool) -> None:
-        cls._verbose = verbose
-
-    @classmethod
-    def show_header(cls) -> None:
-        print(
-            f"\n{COLORS['main']}{Style.BRIGHT}{ICONS['header']} CLI del Orchestrator-TSDHN [v1.0]{Style.RESET_ALL}\n"
+class RichUI:
+    @staticmethod
+    def print_header():
+        console.print(
+            Panel("🌊 CLIENTE DE SIMULACIÓN TSUNAMI [v1.0]", style="bold cyan")
         )
 
-    @classmethod
-    def show_parameters_box(cls, config: Dict) -> None:
+    @staticmethod
+    def show_error(message: str):
+        console.print(f"[bold red]❌ {message}[/bold red]")
+
+    @staticmethod
+    def show_success(message: str):
+        console.print(f"[bold green]✅ {message}[/bold green]")
+
+    @staticmethod
+    def show_info(message: str):
+        console.print(f"[bold cyan]{message}[/bold cyan]")
+
+    @staticmethod
+    def show_parameters_box(config: dict):
         params = config.get("simulation_params", {})
         lines = [
             f"Magnitud (Mw)    : {params.get('Mw', 'N/D')}",
@@ -43,105 +39,161 @@ class UserInterface:
             f"Hora (UTC)       : {params.get('hhmm', 'N/D')}",
             f"Día del mes      : {params.get('dia', 'N/D')}",
         ]
-        width = max(len(line) for line in lines) + 4
-        top = "╔" + "═" * (width - 2) + "╗"
-        bottom = "╚" + "═" * (width - 2) + "╝"
-        print(COLORS["main"] + top + Style.RESET_ALL)
-        for line in lines:
-            print(
-                COLORS["main"] + "║ " + line.ljust(width - 4) + " ║" + Style.RESET_ALL
-            )
-        print(COLORS["main"] + bottom + Style.RESET_ALL)
-        print()
+        content = "\n".join(lines)
+        console.print(Panel(content, title="Parámetros de simulación", style="cyan"))
 
-    @classmethod
-    def ask_yes_no(cls, pregunta: str) -> bool:
-        respuesta = (
-            input(f"{COLORS['main']}{pregunta} [y/N]: {Style.RESET_ALL}")
-            .strip()
-            .lower()
-        )
-        return respuesta in {"y", "yes", "s", "si", "sí"}
+    @staticmethod
+    def prompt_yes_no(prompt_text: str) -> bool:
+        return Confirm.ask(prompt_text, default=False)
 
-    @classmethod
-    def get_input(cls, prompt: str, default: Optional[str] = None) -> str:
-        dft = f" [{default}]" if default else ""
-        respuesta = input(f"{COLORS['main']}{prompt}{dft}: {Style.RESET_ALL}").strip()
-        return respuesta if respuesta else (default or "")
+    @staticmethod
+    def prompt_input(prompt_text: str, default: str = "") -> str:
+        return Prompt.ask(prompt_text, default=default)
 
-    @classmethod
-    def get_float(cls, prompt: str, default: float) -> float:
+    @staticmethod
+    def prompt_float(prompt_text: str, default: float) -> float:
         while True:
-            val = cls.get_input(prompt, str(default))
+            response = Prompt.ask(prompt_text, default=str(default))
             try:
-                return float(val)
+                return float(response)
             except ValueError:
-                cls.show_error("Por favor ingrese un número válido.")
+                RichUI.show_error("Por favor ingrese un número válido.")
 
-    @classmethod
-    def get_time(cls, prompt: str, default: str) -> str:
+    @staticmethod
+    def prompt_time(prompt_text: str, default: str) -> str:
         while True:
-            val = cls.get_input(prompt, default)
-            if len(val) == 4 and val.isdigit():
-                return val
-            cls.show_error("El formato debe ser HHMM (4 dígitos).")
+            response = Prompt.ask(prompt_text, default=default)
+            if len(response) == 4 and response.isdigit():
+                return response
+            RichUI.show_error("El formato debe ser HHMM (4 dígitos).")
 
-    @classmethod
-    def get_day(cls, prompt: str, default: str) -> str:
+    @staticmethod
+    def prompt_day(prompt_text: str, default: str) -> str:
         while True:
-            val = cls.get_input(prompt, default)
-            if val.isdigit() and 1 <= int(val) <= 31:
-                return val
-            cls.show_error("El día debe estar entre 1 y 31.")
+            response = Prompt.ask(prompt_text, default=default)
+            if response.isdigit() and 1 <= int(response) <= 31:
+                return response
+            RichUI.show_error("El día debe estar entre 1 y 31.")
 
-    @classmethod
-    def show_success(cls, mensaje: str) -> None:
-        print(
-            f"{COLORS['success']}{Style.BRIGHT}{ICONS['check']} {mensaje}{Style.RESET_ALL}"
+    @staticmethod
+    def show_analysis_start(timestamp: str):
+        console.print(
+            Panel(f"🚀 El análisis ha comenzado [{timestamp}]", style="bold green")
         )
 
-    @classmethod
-    def show_error(cls, mensaje: str) -> None:
-        print(
-            f"{COLORS['error']}{Style.BRIGHT}{ICONS['error']} {mensaje}{Style.RESET_ALL}"
-        )
-
-    @classmethod
-    def show_info(cls, mensaje: str) -> None:
-        print(f"{COLORS['main']}{mensaje}{Style.RESET_ALL}")
-
-    @classmethod
-    def show_analysis_start(cls, timestamp: str) -> None:
-        print(
-            f"\n{COLORS['main']}{Style.BRIGHT}🚀 El análisis ha comenzado [{timestamp}]{Style.RESET_ALL}"
-        )
-        print("-" * 44)
-
-    @classmethod
+    @staticmethod
     def show_simulation_step(
-        cls, actual: int, total: int, descripcion: str, duracion: float
-    ) -> None:
-        linea = f"[{actual}/{total}] {descripcion}... ({duracion:.1f}s)"
-        print(f"{COLORS['main']}{linea}{Style.RESET_ALL}")
-
-    @classmethod
-    def show_monitoring_header(cls, sim_id: str, inicio: str) -> None:
-        print(
-            f"\n{COLORS['main']}{Style.BRIGHT}🕒 Monitoreando {sim_id} [Inicio {inicio}]{Style.RESET_ALL}"
-        )
-        print("-" * 44)
-
-    @classmethod
-    def show_monitoring_status(
-        cls, transcurrido: str, estado: str, progreso: float
-    ) -> None:
-        barra = cls._progress_bar(progreso)
-        print(
-            f"{COLORS['main']}[{transcurrido}] Estado: {estado} {barra}{Style.RESET_ALL}"
+        current: int, total: int, description: str, duration: float
+    ):
+        console.print(
+            f"[bold cyan][{current}/{total}] {description}... ({duration:.1f}s)[/bold cyan]"
         )
 
-    @classmethod
-    def _progress_bar(cls, progreso: float, ancho: int = 30) -> str:
-        llenado = int(ancho * progreso)
-        vacio = ancho - llenado
-        return f"[{'█' * llenado}{'░' * vacio}] {progreso:.0%}"
+
+class InteractiveMonitor:
+    """
+    Implementa la interfaz interactiva con un layout de cuatro zonas:
+      - Header: Estado general de la simulación.
+      - Monitor: Estado y duración, con cuenta regresiva.
+      - Output: Resultados temporales o ayuda contextual.
+      - Input: Comando actual.
+    """
+
+    def __init__(self, simulation_id: str, start_time: float):
+        self.simulation_id = simulation_id
+        self.start_time = start_time
+        self.status = "PROCESANDO"
+        self.latest_event = "Esperando actualización..."
+        self.progress = 0.0
+        self.elapsed = "00:00:00"
+        self.countdown = 0
+        self.help_visible = False
+        self.command = ""
+        self.exit_requested = False
+        self.running = False
+
+        self.layout = Layout()
+        self.create_layout()
+
+    def create_layout(self):
+        self.layout.split(
+            Layout(name="header", size=3),
+            Layout(name="monitor", size=4),
+            Layout(name="output", size=8),
+            Layout(name="input", size=3),
+        )
+
+    def update_header(self):
+        header_text = (
+            f"🌊 Orchestrator-TSDHN CLI [v1.0]\nSimulación ID: {self.simulation_id}"
+        )
+        self.layout["header"].update(Panel(header_text, style="bold cyan"))
+
+    def update_monitor(self):
+        now = datetime.now().strftime("%H:%M:%S")
+        monitor_text = (
+            f"🔍 Monitoreo activo [{now}]\n"
+            f"ESTADO: {self.status} | DURACIÓN: {self.elapsed}\n"
+            f"ÚLTIMO EVENTO: {self.latest_event}\n"
+            f"Próxima actualización en: {self.countdown:2d} s"
+        )
+        self.layout["monitor"].update(Panel(monitor_text, style="magenta"))
+
+    def update_output(self):
+        if self.help_visible:
+            help_text = (
+                "🛠 Comandos disponibles durante monitoreo:\n"
+                "  ver [1-3]     Mostrar resultados de paso específico\n"
+                "  log           Ver registro detallado de ejecución\n"
+                "  alertas       Listar alertas activas\n"
+                "  salir         Volver al menú principal"
+            )
+            self.layout["output"].update(Panel(help_text, title="Ayuda", style="green"))
+        elif self.command:
+            result_text = f"Mostrando resultados para: [bold]{self.command}[/bold]\n"
+            result_text += "(Presione Enter para continuar...)"
+            self.layout["output"].update(
+                Panel(result_text, title="Resultados", style="blue")
+            )
+        else:
+            self.layout["output"].update(Panel("Esperando comando...", style="dim"))
+
+    def update_input(self):
+        input_text = f"Comando › {self.command}"
+        self.layout["input"].update(Panel(input_text, style="bold yellow"))
+
+    def refresh(self):
+        self.update_header()
+        self.update_monitor()
+        self.update_output()
+        self.update_input()
+
+    async def input_listener(self):
+        while self.running:
+            cmd = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: input("Comando › ")
+            )
+            cmd = cmd.strip().lower()
+            if cmd == "f1":
+                self.help_visible = not self.help_visible
+            elif cmd == "salir":
+                self.exit_requested = True
+            elif cmd:
+                self.command = cmd
+                self.latest_event = f"Ejecutado comando: {self.command}"
+                await asyncio.sleep(2)
+                self.command = ""
+            await asyncio.sleep(0.1)
+
+    async def run(self):
+        self.running = True
+        asyncio.create_task(self.input_listener())
+        from rich.live import Live
+
+        with Live(self.layout, refresh_per_second=4, screen=True):
+            while self.running and not self.exit_requested:
+                self.elapsed = str(
+                    datetime.now() - datetime.fromtimestamp(self.start_time)
+                ).split(".")[0]
+                self.refresh()
+                await asyncio.sleep(0.25)

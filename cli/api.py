@@ -4,7 +4,7 @@ from typing import Any, Dict
 import aiohttp
 
 from cli.constants import DEFAULT_TIMEOUTS
-from cli.ui import UserInterface
+from cli.ui import RichUI
 
 
 class APIClient:
@@ -38,13 +38,13 @@ class APIClient:
                     return await response.text()
                 return await response.read()
         except aiohttp.ClientResponseError as e:
-            UserInterface.show_error(f"Error HTTP {e.status}: {e.message}")
+            RichUI.show_error(f"Error HTTP {e.status}: {e.message}")
             raise
         except asyncio.TimeoutError:
-            UserInterface.show_error("Tiempo de espera agotado")
+            RichUI.show_error("Tiempo de espera agotado")
             raise
         except aiohttp.ClientError as e:
-            UserInterface.show_error(f"Error de conexión: {str(e)}")
+            RichUI.show_error(f"Error de conexión: {str(e)}")
             raise
 
     async def check_connection(self) -> bool:
