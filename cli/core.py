@@ -114,7 +114,7 @@ class SimulationManager:
                 ]
             else:
                 self.config["skip_steps"] = []
-            
+
             SimpleUI.show_info("")
         else:
             # For non-developers, simply set skip_steps to empty or default

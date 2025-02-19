@@ -272,7 +272,7 @@ def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
 
         # Validate and clean up
         validate_pdf(job_work_dir / "reporte.pdf")
-        for f in ["reporte.aux", "reporte.log", "reporte.tex"]:
+        for f in ["reporte.aux", "reporte.out", "reporte.log", "reporte.tex"]:
             (job_work_dir / f).unlink(missing_ok=True)
 
         result = {
