@@ -446,59 +446,31 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
 
 ## Pruebas personalizadas
 
-Además de las [pruebas unitarias](orchestrator/tests/), hemos incluido un cliente de prueba ([`example.py`](example.py)) que permite evaluar el comportamiento del modelo en condiciones específicas.
+Además de las [pruebas unitarias](orchestrator/tests/), ofrecemos una interfaz de línea de comandos (CLI) para ejecutar y monitorear simulaciones directamente a través de la API. Aunque la interfaz web proporciona una visualización más completa, el CLI resulta ideal para entornos con recursos limitados.
 
-Antes de ejecutar el cliente, asegúrate de que **la API esté activa** en segundo plano. Verifica su disponibilidad con:
-
-```bash
-curl -fsS http://localhost:8000/health
-```
-
-Si deseas configurar los parámetros de la simulación, edita los valores en [example.py](example.py?plain=1#L65). Luego, ejecuta:
+Para iniciar el CLI, ejecute:
 
 ```bash
-poetry run python example.py --test
+poetry run python -m cli.cli
 ```
 
-Este comando prueba secuencialmente los endpoints `/calculate`, `/tsunami-travel-times` y `/run-tsdhn`. Una vez completada la inicialización, el cliente consultará al usuario si desea monitorear el progreso de la simulación. Para esto, se utilizan los endpoints `/job-status` y `/job-result`.
-
-La primera vez que el cliente se ejecute, se crearán automáticamente dos archivos:
-
-1. `configuracion_simulacion.json`: Guarda los parámetros de la simulación para futuras referencias.
-2. `last_job_id.txt`: Guarda el identificador de la simulación para monitorear su progreso.
-
-Para monitorear el estado de una simulación específica, ejecuta:
-
-```bash
-poetry run python example.py --monitor <id-simulación> --intervalo 300
-```
-
-El identificador de la simulación se puede encontrar en `last_job_id.txt` o revisando los logs del RQ worker. Este comando verificará el progreso de la simulación pedida cada 300 segundos (5 minutos).
-
-Si deseas reanudar la última simulación registrada, ejecuta:
-
-```
-poetry run python example.py --monitor last --timeout 7200
-```
-
-Este comando monitorea la última simulación registrada por un máximo de 7200 segundos (2 horas).
-
-Los parámetros disponibles para la monitorización:
-
-- `--monitor`: Especifica el identificador de la simulación a monitorizar. Use "`last`" para la simulación más reciente.
-- `--interval`: Define el intervalo de verificación en segundos (predeterminado: `60`).
-- `--timeout`: Establece el tiempo máximo de monitorización en segundos (opcional).
-- `--no-guardar`: Evita que se descargue y guarde automáticamente el informe de resultados.
-- `--url`: Especifica una URL base alternativa para la API (predeterminado: http://localhost:8000). Útil para pruebas en entornos remotos.
-
-También puedes ver los parámetros disponibles en el terminal con:
-
-```bash
-poetry run python example.py --help
-```
+Los parámetros predeterminados de simulación están definidos en [`cli/constants.py`](cli/constants.py?plain=1#L8) y pueden modificarse durante la ejecución.
 
 > [!TIP]
-> La monitorización puede interrumpirse en cualquier momento presionando <kbd>Ctrl+C</kbd>, sin afectar la simulación en curso.
+> Si el CLI hace una pregunta y no deseas cambiar el valor predeterminado, simplemente presiona la tecla <kbd>Enter</kbd> para continuar.
+
+El proceso de ejecución se desarrolla de la siguiente manera:
+
+1. Primero, deberá indicar la URL base de la API (por defecto: "http://localhost:8000").
+2. El CLI buscará el archivo `configuracion_simulacion.json`. Si existe, utilizará los valores almacenados; de lo contrario, creará automáticamente dicho archivo con los valores predeterminados.
+3. Posteriormente, el CLI ejecutará en secuencia los endpoints `/calculate`, `/tsunami-travel-times` y `/run-tsdhn`.
+
+> [!NOTE]
+> El endpoint `run-tsdhn` hace uso de workers RQ para ejecutar la simulación en segundo plano. Así que, apenas se inicie la simulación, el CLI generará en la carpeta raíz el archivo `last_job_id.txt` que contiene el identificador único de la simulación.
+
+Una vez finalizada la simulación, si el parámetro `save_results` está activado (valor predeterminado: `true`), el sistema guardará el informe generado en la carpeta raíz del proyecto.
+
+También puedes personalizar la configuración editando manualmente el archivo `configuracion_simulacion.json` antes de ejecutar el CLI. Este archivo solo se regenera automáticamente durante la primera ejecución o si ha sido eliminado previamente.
 
 ## Notas adicionales
 
