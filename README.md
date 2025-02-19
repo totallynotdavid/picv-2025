@@ -448,29 +448,46 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
 
 Además de las [pruebas unitarias](orchestrator/tests/), ofrecemos una interfaz de línea de comandos (CLI) para ejecutar y monitorear simulaciones directamente a través de la API. Aunque la interfaz web proporciona una visualización más completa, el CLI resulta ideal para entornos con recursos limitados.
 
-Para iniciar el CLI, ejecute:
+Para iniciar el CLI **en modo estándar**, ejecute:
 
 ```bash
 poetry run python -m cli.cli
 ```
 
-Los parámetros predeterminados de simulación están definidos en [`cli/constants.py`](cli/constants.py?plain=1#L8) y pueden modificarse durante la ejecución.
+Los parámetros predeterminados de la simulación están definidos en [`cli/constants.py`](cli/constants.py?plain=1#L8) y pueden modificarse durante la ejecución del CLI así que no es necesario editar el archivo directamente.
 
 > [!TIP]
-> Si el CLI hace una pregunta y no deseas cambiar el valor predeterminado, simplemente presiona la tecla <kbd>Enter</kbd> para continuar.
+> Cuando el CLI te pida información, puedes mantener el valor predeterminado simplemente presionando la tecla <kbd>Enter</kbd>.
 
 El proceso de ejecución se desarrolla de la siguiente manera:
 
-1. Primero, deberás indicar la URL base de la API (por defecto: "http://localhost:8000").
-2. El CLI buscará el archivo `configuracion_simulacion.json`. Si existe, utilizará estos valores; de lo contrario, creará automáticamente este archivo con los valores predeterminados.
-3. Posteriormente, el CLI ejecutará en secuencia los endpoints `/calculate`, `/tsunami-travel-times` y `/run-tsdhn`.
+1. El CLI solicitará la URL base de la API (por defecto: "http://localhost:8000") y se asegurará de que la API esté disponible.
+2. El CLI buscará el archivo `configuracion_simulacion.json`. Si existe, utilizará estos valores; de lo contrario, creará automáticamente este archivo con los valores escogidos por el usuario durante la ejecución del CLI (sean los valores predeterminados o personalizados). Esto facilita la reproducibilidad de simulaciones anteriores.
+3. Posteriormente, el CLI ejecutará secuencialmente los endpoints `/calculate`, `/tsunami-travel-times` y `/run-tsdhn`.
 
 > [!NOTE]
-> El endpoint `run-tsdhn` hace uso de workers RQ para ejecutar la simulación en segundo plano. Así que, apenas se inicie la simulación, el CLI generará en la carpeta raíz el archivo `last_job_id.txt` que contiene el identificador único de la simulación.
+> El endpoint `run-tsdhn` utiliza workers RQ para ejecutar la simulación en segundo plano. Inmediatamente después de iniciar esta simulación, el CLI generará en la carpeta raíz el archivo `last_job_id.txt` que contiene el identificador único de la simulación.
 
-Una vez finalizada la simulación, si el parámetro `save_results` está activado (valor predeterminado: `true`), el CLI guardará el informe generado en la carpeta raíz del proyecto.
+Una vez completada la simulación, si el parámetro `save_results` está activado (valor predeterminado: `true`), el CLI guardará el informe generado en la carpeta raíz del proyecto.
 
-También puedes personalizar la configuración editando manualmente el archivo `configuracion_simulacion.json` antes de ejecutar el CLI. Este archivo solo se regenera automáticamente durante la primera ejecución o si ha sido eliminado previamente.
+También puedes personalizar la configuración editando manualmente el archivo `configuracion_simulacion.json` antes de ejecutar el CLI. Este archivo solamente se regenera automáticamente durante la primera ejecución o si ha sido eliminado previamente.
+
+### Modo avanzado
+
+Para situaciones de desarrollo o depuración, ofrecemos un modo avanzado que proporciona mayor control sobre el proceso de simulación:
+
+```bash
+poetry run python -m cli.cli --dev
+```
+
+Este modo permite omitir pasos específicos durante la ejecución del endpoint `/run-tsdhn`. Esto viene bien al considerar que la ejecución del modelo TSDHN puede tardar entre 25 a 50 minutos en completarse ¡No creo que quieras esperar todo este tiempo para probar un cambio!
+
+Los pasos que pueden omitirse corresponden a los definidos en `PROCESSING_PIPELINE` ubicado en [`orchestrator/core/queue.py`](orchestrator/core/queue.py?plain=1#L68).
+
+> [!WARNING]
+> Es importante destacar que omitir pasos compromete la validez de la simulación. Esta función debe utilizarse exclusivamente para fines de depuración.
+>
+> El CLI también guardará la configuración utilizada en este modo en el archivo `configuracion_simulacion.json`. Así que la siguiente vez que ejecutes el CLI, tratará de usar esta configuración. Para volver al modo estándar, elimina el valor `skip_steps` del archivo o elimina el archivo para que el CLI lo regenere con valores predeterminados en la siguiente ejecución.
 
 ## Notas adicionales
 
