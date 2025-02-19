@@ -461,14 +461,14 @@ Los parámetros predeterminados de simulación están definidos en [`cli/constan
 
 El proceso de ejecución se desarrolla de la siguiente manera:
 
-1. Primero, deberá indicar la URL base de la API (por defecto: "http://localhost:8000").
-2. El CLI buscará el archivo `configuracion_simulacion.json`. Si existe, utilizará los valores almacenados; de lo contrario, creará automáticamente dicho archivo con los valores predeterminados.
+1. Primero, deberás indicar la URL base de la API (por defecto: "http://localhost:8000").
+2. El CLI buscará el archivo `configuracion_simulacion.json`. Si existe, utilizará estos valores; de lo contrario, creará automáticamente este archivo con los valores predeterminados.
 3. Posteriormente, el CLI ejecutará en secuencia los endpoints `/calculate`, `/tsunami-travel-times` y `/run-tsdhn`.
 
 > [!NOTE]
 > El endpoint `run-tsdhn` hace uso de workers RQ para ejecutar la simulación en segundo plano. Así que, apenas se inicie la simulación, el CLI generará en la carpeta raíz el archivo `last_job_id.txt` que contiene el identificador único de la simulación.
 
-Una vez finalizada la simulación, si el parámetro `save_results` está activado (valor predeterminado: `true`), el sistema guardará el informe generado en la carpeta raíz del proyecto.
+Una vez finalizada la simulación, si el parámetro `save_results` está activado (valor predeterminado: `true`), el CLI guardará el informe generado en la carpeta raíz del proyecto.
 
 También puedes personalizar la configuración editando manualmente el archivo `configuracion_simulacion.json` antes de ejecutar el CLI. Este archivo solo se regenera automáticamente durante la primera ejecución o si ha sido eliminado previamente.
 
