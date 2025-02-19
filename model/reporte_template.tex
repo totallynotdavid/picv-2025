@@ -2,7 +2,7 @@
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[spanish]{babel}
-\usepackage[margin=1.75cm]{geometry}
+\usepackage[margin=1.65cm]{geometry}
 \usepackage{lmodern}
 \usepackage{graphicx}
 \usepackage{booktabs}
@@ -32,11 +32,14 @@ La simulación de la propagación del tsunami se realiza con el modelo numérico
 
 Se han colocado 3 mareógrafos virtuales en los puertos de Talara, Callao y Matarani. Se utilizó la ley de Green para la corrección de la amplitud de los mareogramas, debido a que los nodos computacionales no coinciden necesariamente con la ubicación de las estaciones mareográficas costeras (Satake, 2015).
 
+El tiempo promedio de cómputo para una PC i7 es de 15 min para una ventana de tiempo de simulación de 28 horas (Figura 1). Sin embargo, el supercomputador DHN demora menos de 2 minutos.
+
 \textbf{Nota:} El resultado del modelo TSDHN-2022 es una estimación referencial y debe ser utilizado para obtener los parámetros de tsunamis de origen lejano, es decir fuera de las fronteras del litoral de Perú. Para eventos de origen cercano, se debe utilizar el modelo Pre-Tsunami (Jimenez et al., 2018).
 
+\newpage
 \section*{Análisis}
 
-El cuadro 1 muestra los parámetros hipocentrales del terremoto.
+El cuadro 1 muestra los parámetros hipocentrales y mecanismo focal del terremoto.
 
 \begin{table}[H]
   \centering
@@ -46,25 +49,15 @@ El cuadro 1 muestra los parámetros hipocentrales del terremoto.
     \midrule
     Latitud     & @lat\unit{^\circ} \\
     Longitud    & @lon\unit{^\circ} \\
+    \addlinespace
     Profundidad & @depth\unit{km} \\
     Magnitud    & @magnitude\unit{M_w} \\
-    \bottomrule
-  \end{tabular}  
-\end{table}
-
-El cuadro 2 muestra los parámetros del mecanismo focal del terremoto.
-
-\begin{table}[H]
-  \centering
-  \begin{tabular}{@@{}lc@@{}}
-    \toprule
-    \textbf{Parámetro} & \textbf{Valor} \\
-    \midrule
+    \addlinespace
     Strike & @strike\unit{^\circ} \\
     Dip    & @dip\unit{^\circ} \\
     Rake   & @rake\unit{^\circ} \\
     \bottomrule
-  \end{tabular}
+  \end{tabular}  
 \end{table}
 
 La figura \ref{fig:maxola} muestra el mapa de propagación de la máxima energía, la ubicación del epicentro está representado por la esfera focal y las estaciones mareográficas están representadas por los triángulos azules.
@@ -76,12 +69,11 @@ La figura \ref{fig:maxola} muestra el mapa de propagación de la máxima energí
   \label{fig:maxola}
 \end{figure}
 
-La figura \ref{fig:ttt} muestra las isócronas de los tiempos de arribo del tsunami para todo el Océano Pacífico. 
+La figura \ref{fig:ttt} muestra las isócronas de los tiempos de arribo del tsunami para todo el Océano Pacífico. La esfera focal representa el epicentro.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{ttt.eps}
-  \caption{Mapa de tiempo de arribo del tsunami. La esfera focal representa el epicentro.}
   \label{fig:ttt}
 \end{figure}
 
@@ -90,11 +82,10 @@ La figura \ref{fig:mareogramas} muestra los mareogramas simulados para las estac
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth]{mareograma.eps}
-  \caption{Mareogramas simulados en las estaciones de Talara, Callao y Matarani.}
   \label{fig:mareogramas}
 \end{figure}
 
-El cuadro 3 muestra los valores de los tiempos de arribo y la máxima altura del tsunami en las estaciones mareográficas del litoral peruano.
+El cuadro 2 muestra los valores de los tiempos de arribo y la máxima altura del tsunami en las estaciones mareográficas del litoral peruano.
 
 \begin{table}[H]
   \centering
@@ -110,7 +101,6 @@ El cuadro 3 muestra los valores de los tiempos de arribo y la máxima altura del
   \caption{Tiempo de arribo (hh:mm) y máxima amplitud del tsunami}
 \end{table}
 
-\newpage 
 \begin{thebibliography}{99}
 \bibitem{1} B. Papazachos, E. Scordilis, C. Panagiotopoulus and G. Karakaisis. Global relations between seismic fault parameters and moment magnitude of earthquakes. Bulletin of Geological Society of Greece, vol XXXVI, pp 1482-1489 (2004).
 \bibitem{2} Y. Okada. Internal deformation in a half space. Bull. Seismol. Soc. Am. 82(2) 1018-1040 (1992).
