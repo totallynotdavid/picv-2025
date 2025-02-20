@@ -48,6 +48,9 @@ flowchart TB
 > [!WARNING]
 > El proyecto requiere **Ubuntu 20.04** o superior. Usuarios de Windows deben configurar Windows Subsystem for Linux (WSL 2.0 o superior) siguiendo la [<kbd>guía oficial</kbd>](https://learn.microsoft.com/es-es/windows/wsl/install) de Microsoft antes de continuar.
 
+> [!TIP]
+> Ejecuta `bash utils/setup-env.sh` para instalar todos las dependencias mencionados en la sección de prerrequisitos. Además, asegúrate de darle permisos de ejecución con `chmod +x utils/setup-env.sh`.
+
 **Prerrequisitos:**
 
 Actualice los paquetes del sistema antes de iniciar:
@@ -484,9 +487,10 @@ Este modo permite omitir pasos específicos durante la ejecución del endpoint `
 
 Los pasos que pueden omitirse corresponden a los definidos en `PROCESSING_PIPELINE` ubicado en [`orchestrator/core/queue.py`](orchestrator/core/queue.py?plain=1#L68).
 
+> [!CAUTION]
+> Es importante destacar que omitir pasos **compromete la validez de los resultados** de la simulación. Este modo debe utilizarse exclusivamente para fines de depuración.
+
 > [!WARNING]
-> Es importante destacar que omitir pasos compromete la validez de la simulación. Esta función debe utilizarse exclusivamente para fines de depuración.
->
 > El CLI también guardará la configuración utilizada en este modo en el archivo `configuracion_simulacion.json`. Así que la siguiente vez que ejecutes el CLI, tratará de usar esta configuración. Para volver al modo estándar, elimina el valor `skip_steps` del archivo o elimina el archivo para que el CLI lo regenere con valores predeterminados en la siguiente ejecución.
 
 ## Notas adicionales
