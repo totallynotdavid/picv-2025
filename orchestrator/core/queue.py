@@ -5,7 +5,7 @@ import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from redis import Redis
 from redis.exceptions import ConnectionError
@@ -36,11 +36,19 @@ class CompilerConfig:
 @dataclass(frozen=True)
 class ProcessingStep:
     name: str
-    command: List[str]
-    file_checks: List[Tuple[str, str]]
+    command: Optional[List[str]] = None
+    python_callable: Optional[Callable[[Path], None]] = None
+    file_checks: List[Tuple[str, str]] = field(default_factory=list)
     compiler_config: Optional[CompilerConfig] = None
     pre_execute_checks: List[Tuple[str, str]] = field(default_factory=list)
     extra_executables: List[str] = field(default_factory=list)
+    working_dir: Optional[str] = None  # Subdirectory for execution if needed
+
+    def __post_init__(self):
+        if not (self.command is None) ^ (self.python_callable is None):
+            raise ValueError(
+                "ProcessingStep must have either command or python_callable"
+            )
 
     def get_command_path(self, working_dir: Path) -> Path:
         return working_dir / self.command[0]
@@ -64,6 +72,24 @@ class ProcessingStep:
                 make_executable(exe_path)
             else:
                 raise FileNotFoundError(f"Extra executable {exe_path} not found")
+
+
+def generate_reports_wrapper(working_dir: Path) -> None:
+    generate_reports(working_dir)
+
+    for _ in range(2):  # Compile twice to resolve references
+        subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", "reporte.tex"],
+            cwd=working_dir,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    for f in ["reporte.aux", "reporte.out", "reporte.log", "reporte.tex"]:
+        (working_dir / f).unlink(missing_ok=True)
+
+    validate_pdf(working_dir / "reporte.pdf")
 
 
 PROCESSING_PIPELINE = [
@@ -93,15 +119,28 @@ PROCESSING_PIPELINE = [
         file_checks=[("maxola.eps", "Maxola output missing")],
         extra_executables=["espejo"],
     ),
+    ProcessingStep(
+        name="ttt_max",
+        python_callable=process_tsunami_data,
+        file_checks=[
+            ("zfolder/green_rev.dat", "Scaled wave height data output missing"),
+            ("ttt_max.dat", "TTT Max data output missing"),
+        ],
+    ),
+    ProcessingStep(
+        name="generate_reports",
+        python_callable=generate_reports_wrapper,
+        file_checks=[("reporte.pdf", "Final report PDF missing")],
+    ),
 ]
 
 TTT_MUNDO_STEPS = [
     ProcessingStep(
         name="ttt_inverso",
         command=["./ttt_inverso"],
-        file_checks=[],
         compiler_config=CompilerConfig("ttt_inverso.f", "ttt_inverso"),
         extra_executables=["inverse"],
+        working_dir="ttt_mundo",
     ),
 ]
 
@@ -124,9 +163,9 @@ def compile_fortran(source_dir: Path, config: CompilerConfig) -> None:
         config.output,
     ]
     try:
-        subprocess.run(args, cwd=source_dir, check=True)
+        subprocess.run(args, cwd=source_dir, check=True, capture_output=True)
     except subprocess.CalledProcessError as e:
-        logger.error(f"Compilation failed for {config.source}: {e}")
+        logger.error(f"Compilation failed for {config.source}:\n{e.stderr.decode()}")
         raise
 
 
@@ -150,28 +189,41 @@ def validate_pdf(filepath: Path) -> None:
         raise ValueError(f"PDF file {filepath} seems corrupted")
 
 
+def _update_job_metadata(job: Optional[Job], details: str, **kwargs) -> None:
+    if job:
+        job.meta.update({"details": details, **kwargs})
+        job.save_meta()
+
+
 def process_step(step: ProcessingStep, working_dir: Path) -> None:
     logger.info(f"Processing step: {step.name}")
 
-    step.handle_compilation(working_dir)
-    step.validate_pre_execute(working_dir)
-    step.prepare_executables(working_dir)
+    if step.python_callable:
+        step.python_callable(working_dir)
+    else:
+        step.handle_compilation(working_dir)
+        step.validate_pre_execute(working_dir)
+        step.prepare_executables(working_dir)
 
-    # Make main command executable
-    command_path = step.get_command_path(working_dir)
-    make_executable(command_path)
+        # Make main command executable
+        command_path = step.get_command_path(working_dir)
+        make_executable(command_path)
 
-    # Execute the command
-    subprocess.run(step.command, cwd=working_dir, check=True)
+        # Execute the command
+        subprocess.run(
+            step.command,
+            cwd=working_dir,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+
     validate_files(working_dir, step.file_checks)
 
 
 def check_dependencies() -> None:
     required_commands = ["gfortran", "pdflatex", "csh"]
-    missing = []
-    for cmd in required_commands:
-        if not shutil.which(cmd):
-            missing.append(cmd)
+    missing = [cmd for cmd in required_commands if not shutil.which(cmd)]
 
     if missing:
         error_msg = f"Missing required system commands: {', '.join(missing)}"
@@ -182,16 +234,12 @@ def check_dependencies() -> None:
 def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
     job = get_current_job()
     job_work_dir = None
-    try:
-        if job:
-            job.meta.update(
-                {
-                    "status": JobStatus.RUNNING.value,
-                    "details": "Initializing environment",
-                }
-            )
-            job.save_meta()
 
+    try:
+        # Initialize job metadata
+        _update_job_metadata(
+            job, "Initializing environment", status=JobStatus.RUNNING.value
+        )
         logger.info(f"Starting TSDHN execution for job {job_id}")
         check_dependencies()
 
@@ -207,122 +255,51 @@ def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
         logger.info(f"Processing job {job_id} in {job_work_dir}")
         skip_steps = skip_steps or []
 
-        # Validate skip_steps parameter
-        all_steps = [step.name for step in PROCESSING_PIPELINE + TTT_MUNDO_STEPS] + [
-            "ttt_max"
-        ]
-        if invalid := set(skip_steps) - set(all_steps):
+        # Validate skip steps
+        all_step_names = [step.name for step in PROCESSING_PIPELINE + TTT_MUNDO_STEPS]
+        if invalid := set(skip_steps) - set(all_step_names):
             raise ValueError(f"Invalid skip steps: {invalid}")
 
-        # Main processing pipeline
+        # Process main pipeline
         for step in PROCESSING_PIPELINE:
             if step.name in skip_steps:
                 logger.info(f"Skipping step: {step.name}")
                 continue
 
-            if job:
-                job.meta["details"] = f"Processing {step.name}"
-                job.save_meta()
-
-            process_step(step, job_work_dir)
-
-        # Process ttt_max step
-        if "ttt_max" not in skip_steps:
-            if job:
-                job.meta["details"] = "Processing ttt_max"
-                job.save_meta()
-
-            # Check for required input files
-            validate_files(
-                job_work_dir,
-                [
-                    (
-                        "zfolder/green.dat",
-                        "Green data file missing - required for ttt_max",
-                    ),
-                ],
+            step_dir = (
+                job_work_dir / step.working_dir if step.working_dir else job_work_dir
             )
+            step_dir.mkdir(parents=True, exist_ok=True)
 
-            # Run the Python implementation
-            logger.info("Running ttt_max Python implementation")
-            process_tsunami_data(job_work_dir)
-
-            # Validate output files
-            validate_files(
-                job_work_dir,
-                [
-                    ("zfolder/green_rev.dat", "Scaled wave height data output missing"),
-                    ("ttt_max.dat", "TTT Max data output missing"),
-                    # ("mareograma.ps", "Mareograma output missing"),
-                ],
-            )
+            _update_job_metadata(job, f"Processing {step.name}")
+            process_step(step, step_dir)
 
         # Process TTT Mundo steps
-        ttt_mundo_dir = job_work_dir / "ttt_mundo"
         for step in TTT_MUNDO_STEPS:
             if step.name in skip_steps:
                 logger.info(f"Skipping step: {step.name}")
                 continue
 
-            if job:
-                job.meta["details"] = f"Processing {step.name}"
-                job.save_meta()
-
-            process_step(step, ttt_mundo_dir)
-
-        # Generate final reports
-        if job:
-            job.meta["details"] = "Generating report"
-            job.save_meta()
-
-        validate_files(
-            job_work_dir,
-            [
-                ("meca.dat", "Seismic data missing"),
-                ("ttt_max.dat", "Tsunami timing data missing"),
-            ],
-        )
-
-        generate_reports(job_work_dir)
-
-        # Compile LaTeX report
-        for _ in range(2):
-            subprocess.run(
-                ["pdflatex", "-interaction=nonstopmode", "reporte.tex"],
-                cwd=job_work_dir,
-                check=True,
-                stdout=subprocess.DEVNULL,
-            )
-
-        # Validate and clean up
-        validate_pdf(job_work_dir / "reporte.pdf")
-        for f in ["reporte.aux", "reporte.out", "reporte.log", "reporte.tex"]:
-            (job_work_dir / f).unlink(missing_ok=True)
+            step_dir = job_work_dir / "ttt_mundo"
+            _update_job_metadata(job, f"Processing {step.name}")
+            process_step(step, step_dir)
 
         result = {
             "status": JobStatus.COMPLETED.value,
             "job_id": job_id,
             "download_url": f"/job-result/{job_id}",
         }
-
-        if job:
-            job.meta.update(result)
-            job.meta["details"] = "Completed successfully"
-            job.save_meta()
-
+        _update_job_metadata(job, "Completed successfully", **result)
         return result
 
     except Exception as e:
         logger.exception(f"Job {job_id} failed: {str(e)}")
-        if job:
-            job.meta.update(
-                {
-                    "status": JobStatus.FAILED.value,
-                    "error": f"{type(e).__name__}: {str(e)}",
-                    "details": f"Failed at: {job.meta.get('details')}",
-                }
-            )
-            job.save_meta()
+        _update_job_metadata(
+            job,
+            f"Failed at: {job.meta.get('details') if job else 'Unknown step'}",
+            status=JobStatus.FAILED.value,
+            error=f"{type(e).__name__}: {str(e)}",
+        )
 
         if job_work_dir and job_work_dir.exists():
             shutil.rmtree(job_work_dir, ignore_errors=True)
@@ -338,14 +315,17 @@ class TSDHNJob:
             db=redis_db,
             socket_connect_timeout=5,
             socket_keepalive=True,
+            decode_responses=True,
         )
         self.queue = Queue("tsdhn_queue", connection=self.redis)
 
     def enqueue_job(self, skip_steps: List[str] = None) -> str:
         try:
-            # Validate steps before queuing
-            all_steps = [step.name for step in PROCESSING_PIPELINE + TTT_MUNDO_STEPS]
-            if invalid := set(skip_steps or []) - set(all_steps):
+            # Validate skip steps before queuing
+            all_step_names = [
+                step.name for step in PROCESSING_PIPELINE + TTT_MUNDO_STEPS
+            ]
+            if invalid := set(skip_steps or []) - set(all_step_names):
                 raise ValueError(f"Invalid skip steps: {invalid}")
 
             job_id = str(uuid.uuid4())
@@ -356,12 +336,15 @@ class TSDHNJob:
                 job_id=job_id,
                 job_timeout="2h",
                 result_ttl=86400,
-                meta={"status": JobStatus.QUEUED.value, "details": "Waiting in queue"},
+                meta={
+                    "status": JobStatus.QUEUED.value,
+                    "details": "Waiting in queue",
+                },
             )
             return job_id
-        except ConnectionError:
-            logger.error("Redis connection failed")
-            raise
+        except ConnectionError as e:
+            logger.error("Redis connection failed: %s", e)
+            raise RuntimeError("Could not connect to job queue") from e
         except Exception as e:
             logger.exception("Job enqueue failed")
             raise RuntimeError(f"Enqueue failed: {str(e)}") from e
@@ -375,6 +358,7 @@ class TSDHNJob:
                 "finished": JobStatus.COMPLETED.value,
                 "failed": JobStatus.FAILED.value,
             }
+
             return {
                 "status": status_map.get(job.get_status(), JobStatus.QUEUED.value),
                 "details": job.meta.get("details"),
