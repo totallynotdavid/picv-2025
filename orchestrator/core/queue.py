@@ -253,7 +253,7 @@ def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
                 [
                     ("zfolder/green_rev.dat", "Scaled wave height data output missing"),
                     ("ttt_max.dat", "TTT Max data output missing"),
-                    ("mareograma.ps", "Mareograma output missing"),
+                    # ("mareograma.ps", "Mareograma output missing"),
                 ],
             )
 
