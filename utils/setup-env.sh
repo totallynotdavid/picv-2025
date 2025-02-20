@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eo pipefail
 
-# Append a configuration block to a file if a unique marker is not already present.
+# Append a configuration block with a unique marker to a file.
 append_config_block() {
     local marker="$1"   # e.g., "# [PYENV CONFIGURATION]"
     local config="$2"   # block to append
@@ -13,9 +13,9 @@ append_config_block() {
     fi
 }
 
-# WSL appends Windows path to the PATH variable, which can cause issues with pyenv
-# if pyenv is installed in both Windows and WSL
-# Determine if running on WSL
+# WSL appends Windows path to the PATH variable, 
+# which can cause issues with pyenv if pyenv is
+# installed in both Windows and WSL
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
     PYENV_CFG="export PYENV_ROOT=\"\$HOME/.pyenv\"
 export PATH=\"\$PYENV_ROOT/bin:\$PATH\"
@@ -44,17 +44,24 @@ if (( ${#missing_pkgs[@]} > 0 )); then
 fi
 
 BASHRC=~/.bashrc
-append_config_block "# [PYENV CONFIGURATION]" "$PYENV_CFG" "$BASHRC"
-# shellcheck disable=SC2016
-append_config_block "# [POETRY PATH]" 'export PATH="$HOME/.local/bin:$PATH"' "$BASHRC"
-# shellcheck disable=SC2016
-append_config_block "# [TEXLIVE PATH]" 'export PATH="$HOME/texlive/bin/x86_64-linux:$PATH"' "$BASHRC"
+
+if ! command -v pyenv &>/dev/null; then
+    append_config_block "# [PYENV CONFIGURATION]" "$PYENV_CFG" "$BASHRC"
+fi
+
+if ! command -v poetry &>/dev/null; then
+    append_config_block "# [POETRY PATH]" 'export PATH="$HOME/.local/bin:$PATH"' "$BASHRC"
+fi
+
+if ! command -v tex &>/dev/null; then
+    append_config_block "# [TEXLIVE PATH]" 'export PATH="$HOME/texlive/bin/x86_64-linux:$PATH"' "$BASHRC"
+fi
 
 source "$BASHRC"
 
 if [[ ! -d "$HOME/.pyenv" ]]; then
     curl -fsSL https://pyenv.run | bash
-    # We have to make sure that pyenv is available in the current shell
+    # We have to double make sure that pyenv is available in the current shell
     export PYENV_ROOT="$HOME/.pyenv"
     export PATH="$PYENV_ROOT/bin:$PATH"
     eval "$(pyenv init -)"
