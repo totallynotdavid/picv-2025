@@ -488,7 +488,7 @@ Este modo permite omitir pasos específicos durante la ejecución del endpoint `
 Los pasos que pueden omitirse corresponden a los definidos en `PROCESSING_PIPELINE` ubicado en [`orchestrator/core/queue.py`](orchestrator/core/queue.py?plain=1#L68).
 
 > [!CAUTION]
-> Es importante destacar que omitir pasos compromete la validez de la simulación. Esta función debe utilizarse exclusivamente para fines de depuración.
+> Es importante destacar que omitir pasos **compromete la validez de los resultados** de la simulación. Este modo debe utilizarse exclusivamente para fines de depuración.
 
 > [!WARNING]
 > El CLI también guardará la configuración utilizada en este modo en el archivo `configuracion_simulacion.json`. Así que la siguiente vez que ejecutes el CLI, tratará de usar esta configuración. Para volver al modo estándar, elimina el valor `skip_steps` del archivo o elimina el archivo para que el CLI lo regenere con valores predeterminados en la siguiente ejecución.
