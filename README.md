@@ -48,6 +48,9 @@ flowchart TB
 > [!WARNING]
 > El proyecto requiere **Ubuntu 20.04** o superior. Usuarios de Windows deben configurar Windows Subsystem for Linux (WSL 2.0 o superior) siguiendo la [<kbd>guía oficial</kbd>](https://learn.microsoft.com/es-es/windows/wsl/install) de Microsoft antes de continuar.
 
+> [!TIP]
+> Ejecuta `bash utils/setup-env.sh` para instalar todos las dependencias (prerrequisitos) automáticamente. Asegúrate de darle permisos de ejecución con `chmod +x utils/setup-env.sh`.
+
 **Prerrequisitos:**
 
 Actualice los paquetes del sistema antes de iniciar:
