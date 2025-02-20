@@ -315,7 +315,6 @@ class TSDHNJob:
             db=redis_db,
             socket_connect_timeout=5,
             socket_keepalive=True,
-            decode_responses=True,
         )
         self.queue = Queue("tsdhn_queue", connection=self.redis)
 
