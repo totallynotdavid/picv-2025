@@ -1,110 +1,106 @@
 #!/bin/bash
-set -e
+set -eo pipefail
 
-# Detect WSL environment
+# Append a configuration block to a file if a unique marker is not already present.
+append_config_block() {
+    local marker="$1"   # e.g., "# [PYENV CONFIGURATION]"
+    local config="$2"   # block to append
+    local file="$3"
+    [ -f "$file" ] || touch "$file"
+    if ! grep -Fq "$marker" "$file"; then
+        echo -e "\n$marker" >> "$file"
+        echo -e "$config" >> "$file"
+    fi
+}
+
+# WSL appends Windows path to the PATH variable, which can cause issues with pyenv
+# if pyenv is installed in both Windows and WSL
+# Determine if running on WSL
 if [[ -f /proc/sys/fs/binfmt_misc/WSLInterop ]]; then
-    IS_WSL=true
-    echo "Detected WSL environment"
+    PYENV_CFG="export PYENV_ROOT=\"\$HOME/.pyenv\"
+export PATH=\"\$PYENV_ROOT/bin:\$PATH\"
+eval \"\$(pyenv init -)\""
 else
-    IS_WSL=false
-    echo "Detected native Ubuntu environment"
+    PYENV_CFG="export PYENV_ROOT=\"\$HOME/.pyenv\"
+[[ -d \$PYENV_ROOT/bin ]] && export PATH=\"\$PYENV_ROOT/bin:\$PATH\"
+eval \"\$(pyenv init - bash)\""
 fi
 
-# System update
-echo "Updating system packages..."
 sudo apt update -y && sudo apt upgrade -y
 
-# Install pyenv
-echo "Installing pyenv..."
-curl -fsSL https://pyenv.run | bash
-
-# Configure pyenv in .bashrc
-echo "Configuring pyenv..."
-if $IS_WSL; then
-    cat << 'EOF' >> ~/.bashrc
-export PYENV_ROOT="$HOME/.pyenv"
-export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init -)"
-EOF
-else
-    cat << 'EOF' >> ~/.bashrc
-export PYENV_ROOT="$HOME/.pyenv"
-[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init - bash)"
-EOF
+REQUIRED_PKGS=(
+    build-essential zlib1g-dev libffi-dev libssl-dev libbz2-dev
+    libreadline-dev libsqlite3-dev liblzma-dev libncurses-dev tk-dev
+    git-lfs cmake gfortran redis-server gmt gmt-dcw gmt-gshhg ps2eps csh
+)
+missing_pkgs=()
+for pkg in "${REQUIRED_PKGS[@]}"; do
+    if ! dpkg -s "$pkg" &>/dev/null; then
+        missing_pkgs+=("$pkg")
+    fi
+done
+if (( ${#missing_pkgs[@]} > 0 )); then
+    sudo apt install -y "${missing_pkgs[@]}"
 fi
 
-source ~/.bashrc
+BASHRC=~/.bashrc
+append_config_block "# [PYENV CONFIGURATION]" "$PYENV_CFG" "$BASHRC"
+# shellcheck disable=SC2016
+append_config_block "# [POETRY PATH]" 'export PATH="$HOME/.local/bin:$PATH"' "$BASHRC"
+# shellcheck disable=SC2016
+append_config_block "# [TEXLIVE PATH]" 'export PATH="$HOME/texlive/bin/x86_64-linux:$PATH"' "$BASHRC"
 
-# Install Python build dependencies
-echo "Installing Python build dependencies..."
-sudo apt install -y build-essential zlib1g-dev libffi-dev libssl-dev libbz2-dev \
-    libreadline-dev libsqlite3-dev liblzma-dev libncurses-dev tk-dev
+source "$BASHRC"
 
-# Install Python 3.12 using pyenv
-echo "Installing Python 3.12..."
-pyenv install 3.12
-pyenv global 3.12
+if [[ ! -d "$HOME/.pyenv" ]]; then
+    curl -fsSL https://pyenv.run | bash
+    # We have to make sure that pyenv is available in the current shell
+    export PYENV_ROOT="$HOME/.pyenv"
+    export PATH="$PYENV_ROOT/bin:$PATH"
+    eval "$(pyenv init -)"
+    pyenv install -s 3.12
+    pyenv global 3.12
+fi
 
-# Verify Python installation
-echo "Verifying Python installation..."
-python3 -V
-pip3 -V
+if ! command -v poetry &>/dev/null; then
+    curl -sSL https://install.python-poetry.org | python3 -
+fi
 
-# Install Poetry
-echo "Installing Poetry..."
-curl -sSL https://install.python-poetry.org | python3 -
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-poetry --version
+if ! command -v ttt_client &>/dev/null; then
+    echo -e "\n📦 Installing TTT SDK..."
+    TMP_DIR=$(mktemp -d)
+    git clone -q https://gitlab.com/totallynotdavid/tttapi/ "$TMP_DIR/tttapi"
+    (
+        cd "$TMP_DIR/tttapi"
+        make config compile
+        sudo make install datadir docs
+        make test clean
+    )
+    rm -rf "$TMP_DIR"
+fi
 
-# Install TTT SDK dependencies
-echo "Installing TTT SDK dependencies..."
-sudo apt install -y git-lfs cmake
+if [[ ! -d "$HOME/texlive" ]]; then
+    TMP_TL=$(mktemp -d)
+    pushd "$TMP_TL" > /dev/null
+    wget -q https://mirror.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz
+    tar -xzf install-tl-unx.tar.gz
+    cd install-tl-2*/
+    perl ./install-tl \
+        --profile=- \
+        --texdir="$HOME/texlive" \
+        --texuserdir="$HOME/.texlive" \
+        --no-interaction <<< $'selected_scheme scheme-basic\ntlpdbopt_autobackup 0\ntlpdbopt_install_docfiles 0\ntlpdbopt_install_srcfiles 0'
+    tlmgr install babel-spanish hyphen-spanish booktabs --verify-repo=none --quiet
+    popd > /dev/null
+    rm -rf "$TMP_TL"
+fi
 
-# Install TTT SDK
-echo "Installing TTT SDK..."
-git clone https://gitlab.com/totallynotdavid/tttapi/
-cd tttapi
-make config compile
-sudo make install datadir docs
-make test clean
-cd ..
+REDIS_CONF="/etc/redis/redis.conf"
+if ! sudo grep -q "^supervised systemd" "$REDIS_CONF"; then
+    sudo cp "$REDIS_CONF" "${REDIS_CONF}.bak"
+    sudo sed -i '/^# *supervised/s/^# *//' "$REDIS_CONF"
+    sudo sed -i 's/^supervised .*/supervised systemd/' "$REDIS_CONF"
+    sudo systemctl restart redis-server
+fi
 
-# Install TeXLive
-echo "Installing TeXLive..."
-cd /tmp
-wget https://mirror.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz
-zcat < install-tl-unx.tar.gz | tar xf -
-cd install-tl-2*
-
-cat > texlive.profile << 'EOF'
-selected_scheme scheme-basic
-tlpdbopt_autobackup 0
-tlpdbopt_install_docfiles 0
-tlpdbopt_install_srcfiles 0
-EOF
-
-perl ./install-tl --profile=texlive.profile \
-                  --texdir "$HOME/texlive" \
-                  --texuserdir "$HOME/.texlive" \
-                  --no-interaction
-
-echo 'export PATH="$HOME/texlive/bin/x86_64-linux:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-
-# Install LaTeX packages
-echo "Installing LaTeX packages..."
-tlmgr update --self
-tlmgr install babel-spanish hyphen-spanish booktabs
-
-# Install additional dependencies
-echo "Installing additional dependencies..."
-sudo apt install -y gfortran redis-server gmt gmt-dcw gmt-gshhg ps2eps csh
-
-# Configure Redis
-echo "Configuring Redis..."
-sudo sed -i 's/^# \?supervised \(no\|auto\)/supervised systemd/' /etc/redis/redis.conf
-sudo systemctl restart redis-server
-
-echo "Environment setup completed successfully!"
+echo -e "\n✅ Environment configured successfully"
