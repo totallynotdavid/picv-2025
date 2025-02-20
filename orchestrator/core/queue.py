@@ -13,6 +13,7 @@ from rq import Queue, get_current_job
 from rq.job import Job
 
 from orchestrator.modules.reporte import generate_reports
+from orchestrator.modules.ttt_max import process_tsunami_data
 
 logger = logging.getLogger(__name__)
 
@@ -91,16 +92,6 @@ PROCESSING_PIPELINE = [
         command=["./maxola.csh"],
         file_checks=[("maxola.eps", "Maxola output missing")],
         extra_executables=["espejo"],
-    ),
-    ProcessingStep(
-        name="ttt_max",
-        command=["./ttt_max"],
-        file_checks=[
-            ("zfolder/green_rev.dat", "Scaled wave height data output missing"),
-            ("ttt_max.dat", "TTT Max data output missing"),
-        ],
-        compiler_config=CompilerConfig("ttt_max.f90", "ttt_max"),
-        pre_execute_checks=[("mareograma.csh", "mareograma.csh script missing")],
     ),
 ]
 
@@ -217,7 +208,9 @@ def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
         skip_steps = skip_steps or []
 
         # Validate skip_steps parameter
-        all_steps = [step.name for step in PROCESSING_PIPELINE + TTT_MUNDO_STEPS]
+        all_steps = [step.name for step in PROCESSING_PIPELINE + TTT_MUNDO_STEPS] + [
+            "ttt_max"
+        ]
         if invalid := set(skip_steps) - set(all_steps):
             raise ValueError(f"Invalid skip steps: {invalid}")
 
@@ -232,6 +225,37 @@ def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
                 job.save_meta()
 
             process_step(step, job_work_dir)
+
+        # Process ttt_max step
+        if "ttt_max" not in skip_steps:
+            if job:
+                job.meta["details"] = "Processing ttt_max"
+                job.save_meta()
+
+            # Check for required input files
+            validate_files(
+                job_work_dir,
+                [
+                    (
+                        "zfolder/green.dat",
+                        "Green data file missing - required for ttt_max",
+                    ),
+                ],
+            )
+
+            # Run the Python implementation
+            logger.info("Running ttt_max Python implementation")
+            process_tsunami_data(job_work_dir)
+
+            # Validate output files
+            validate_files(
+                job_work_dir,
+                [
+                    ("zfolder/green_rev.dat", "Scaled wave height data output missing"),
+                    ("ttt_max.dat", "TTT Max data output missing"),
+                    ("mareograma.ps", "Mareograma output missing"),
+                ],
+            )
 
         # Process TTT Mundo steps
         ttt_mundo_dir = job_work_dir / "ttt_mundo"
