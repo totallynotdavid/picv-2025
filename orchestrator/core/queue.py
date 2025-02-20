@@ -125,6 +125,7 @@ PROCESSING_PIPELINE = [
         file_checks=[
             ("zfolder/green_rev.dat", "Scaled wave height data output missing"),
             ("ttt_max.dat", "TTT Max data output missing"),
+            ("mareograma.eps", "Mareogram plot missing"),
         ],
     ),
     ProcessingStep(
