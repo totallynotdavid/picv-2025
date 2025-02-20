@@ -103,7 +103,7 @@ def process_tsunami_data(working_dir: Path):
                     mata_val = station_data["mata"][k]
 
                     f.write(
-                        f"{time_val:12.6f} {fortran_float_format(tala_val)} {fortran_float_format(cala_val)} {fortran_float_format(mata_val)}\n"
+                        f"{time_val:12.6f} {fortran_float_format(tala_val)} {fortran_float_format(cala_val)} {fortran_float_format(mata_val)}\n"  # noqa: E501
                     )
         except Exception as e:
             logger.error(f"Error writing output file: {e}")
@@ -235,10 +235,17 @@ def plot_mareograma(scale, tick_type):
         region = f"0/{tdur}/-{scale}/{scale}"
         axis = f'a2g1:"":/a{y_tick}:"":SW'
 
-        cmd = f"gmt psbasemap -JX{size} -R{region} -B{axis} -P -K -X3.0c -Y24.0c > {psfile}"
+        cmd = (
+            f"gmt psbasemap -JX{size} -R{region} -B{axis} "
+            f"-P -K -X3.0c -Y24.0c > {psfile}"
+        )
         subprocess.run(cmd, shell=True, check=True)
 
-        cmd = f"awk '{{ print $1,$2 }}' {datafile} | gmt psxy -W.5,blue -JX{size} -R{region} -K -O -P >> {psfile}"
+        cmd = (
+            f"awk '{{ print $1,$2 }}' {datafile} | "
+            f"gmt psxy -W.5,blue -JX{size} -R{region} "
+            f"-K -O -P >> {psfile}"
+        )
         subprocess.run(cmd, shell=True, check=True)
 
         # Create temporary file for text label
@@ -255,10 +262,17 @@ def plot_mareograma(scale, tick_type):
         region = f"0/{tdur}/-{scale}/{scale}"
         axis = f'a2g1:"":/a{y_tick}:"H\\40(m)":SW'
 
-        cmd = f"gmt psbasemap -JX{size} -R{region} -B{axis} -P -K -X0 -Y-{dy} -O >> {psfile}"
+        cmd = (
+            f"gmt psbasemap -JX{size} -R{region} -B{axis} "
+            f"-P -K -X0 -Y-{dy} -O >> {psfile}"
+        )
         subprocess.run(cmd, shell=True, check=True)
 
-        cmd = f"awk '{{ print $1,$3 }}' {datafile} | gmt psxy -W.5,blue -JX{size} -R{region} -K -O -P >> {psfile}"
+        cmd = (
+            f"awk '{{ print $1,$3 }}' {datafile} | "
+            f"gmt psxy -W.5,blue -JX{size} -R{region} "
+            f"-K -O -P >> {psfile}"
+        )
         subprocess.run(cmd, shell=True, check=True)
 
         callao_text = tempfile.NamedTemporaryFile(delete=False, mode="w")
@@ -276,10 +290,17 @@ def plot_mareograma(scale, tick_type):
         region = f"0/{tdur}/-{scale}/{scale}"
         axis = f'a2g1:"Time\\40(h)":/a{y_tick}:"":SW'
 
-        cmd = f"gmt psbasemap -JX{size} -R{region} -B{axis} -P -K -X0 -Y-{dy} -O >> {psfile}"
+        cmd = (
+            f"gmt psbasemap -JX{size} -R{region} -B{axis} "
+            f"-P -K -X0 -Y-{dy} -O >> {psfile}"
+        )
         subprocess.run(cmd, shell=True, check=True)
 
-        cmd = f"awk '{{ print $1,$4 }}' {datafile} | gmt psxy -W.5,blue -JX{size} -R{region} -K -O -P >> {psfile}"
+        cmd = (
+            f"awk '{{ print $1,$4 }}' {datafile} | "
+            f"gmt psxy -W.5,blue -JX{size} -R{region} "
+            f"-K -O -P >> {psfile}"
+        )
         subprocess.run(cmd, shell=True, check=True)
 
         matarani_text = tempfile.NamedTemporaryFile(delete=False, mode="w")
@@ -287,7 +308,10 @@ def plot_mareograma(scale, tick_type):
         matarani_text.close()
         temp_files.append(matarani_text.name)
 
-        cmd = f"gmt pstext -JX{size} -R0/10/0/4 -K -O -V < {matarani_text.name} >> {psfile}"
+        cmd = (
+            f"gmt pstext -JX{size} -R0/10/0/4 -K -O -V < "
+            f"{matarani_text.name} >> {psfile}"
+        )
         subprocess.run(cmd, shell=True, check=True)
 
         # Convert PS to EPS and cleanup
