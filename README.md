@@ -449,7 +449,7 @@ El proceso inicia cuando el usuario envía datos sísmicos desde la [interfaz we
 
 ## Pruebas personalizadas
 
-Además de las [pruebas unitarias](orchestrator/tests/), ofrecemos una interfaz de línea de comandos (CLI) para ejecutar y monitorear simulaciones directamente a través de la API. Aunque la interfaz web proporciona una visualización más completa, el CLI resulta ideal para entornos con recursos limitados.
+Además de las pruebas unitarias ubicadas en [`orchestrator/tests/`](orchestrator/tests/), el repositorio incluye una interfaz de línea de comandos (CLI) para ejecutar simulaciones directamente mediante la API. Esta herramienta resulta particularmente útil para validaciones rápidas en entornos con recursos limitados o para realizar pruebas preliminares.
 
 Para iniciar el CLI **en modo estándar**, ejecute:
 
@@ -457,41 +457,32 @@ Para iniciar el CLI **en modo estándar**, ejecute:
 poetry run python -m cli.cli
 ```
 
-Los parámetros predeterminados de la simulación están definidos en [`cli/constants.py`](cli/constants.py?plain=1#L8) y pueden modificarse durante la ejecución del CLI así que no es necesario editar el archivo directamente.
+El CLI utiliza los parámetros predeterminados definidos en [`cli/constants.py`](cli/constants.py?plain=1#L8), los cuales pueden modificarse interactivamente durante la ejecución. Al solicitar valores, simplemente presione <kbd>Enter</kbd> para conservar la configuración existente.
 
-> [!TIP]
-> Cuando el CLI te pida información, puedes mantener el valor predeterminado simplemente presionando la tecla <kbd>Enter</kbd>.
+El flujo de ejecución sigue tres etapas secuenciales:
 
-El proceso de ejecución se desarrolla de la siguiente manera:
+1. Verificación de conectividad con la API (URL predeterminada: `http://localhost:8000`).
+2. Búsqueda del archivo `configuracion_simulacion.json` en el directorio raíz. Si no existe, se genera automáticamente con los valores predeterminados o los proporcionados por el usuario.
+3. Ejecución secuencial de los endpoints `/calculate` (parámetros iniciales), `/tsunami-travel-times` (cálculo de tiempos de arribo) y `/run-tsdhn` (simulación completa).
 
-1. El CLI solicitará la URL base de la API (por defecto: "http://localhost:8000") y se asegurará de que la API esté disponible.
-2. El CLI buscará el archivo `configuracion_simulacion.json`. Si existe, utilizará estos valores; de lo contrario, creará automáticamente este archivo con los valores escogidos por el usuario durante la ejecución del CLI (sean los valores predeterminados o personalizados). Esto facilita la reproducibilidad de simulaciones anteriores.
-3. Posteriormente, el CLI ejecutará secuencialmente los endpoints `/calculate`, `/tsunami-travel-times` y `/run-tsdhn`.
+Tras iniciar el endpoint `run-tsdhn`, el CLI genera en el directorio raíz el archivo `last_job_id.txt` con un identificador único de la simulación. Cuando el parámetro `save_results` está activado (valor predeterminado: `true`), el informe PDF resultante se almacenará en este mismo directorio una vez finalizado el proceso.
 
-> [!NOTE]
-> El endpoint `run-tsdhn` utiliza workers RQ para ejecutar la simulación en segundo plano. Inmediatamente después de iniciar esta simulación, el CLI generará en la carpeta raíz el archivo `last_job_id.txt` que contiene el identificador único de la simulación.
+También puedes personalizar la configuración editando manualmente el archivo `configuracion_simulacion.json`. Este archivo solo se regenera automáticamente durante la primera ejecución o si ha sido eliminado previamente.
 
-Una vez completada la simulación, si el parámetro `save_results` está activado (valor predeterminado: `true`), el CLI guardará el informe generado en la carpeta raíz del proyecto.
+### Modo de desarrollo
 
-También puedes personalizar la configuración editando manualmente el archivo `configuracion_simulacion.json` antes de ejecutar el CLI. Este archivo solamente se regenera automáticamente durante la primera ejecución o si ha sido eliminado previamente.
-
-### Modo avanzado
-
-Para situaciones de desarrollo o depuración, ofrecemos un modo avanzado que proporciona mayor control sobre el proceso de simulación:
+Para escenarios de depuración o desarrollo, el sistema ofrece un modo avanzado que permite controlar etapas específicas del pipeline de procesamiento:
 
 ```bash
 poetry run python -m cli.cli --dev
 ```
 
-Este modo permite omitir pasos específicos durante la ejecución del endpoint `/run-tsdhn`. Esto viene bien al considerar que la ejecución del modelo TSDHN puede tardar entre 25 a 50 minutos en completarse ¡No creo que quieras esperar todo este tiempo para probar un cambio!
+Este modo permite omitir componentes específicos de la cadena de procesamiento definida en `PROCESSING_PIPELINE` en [`orchestrator/core/queue.py`](orchestrator/core/queue.py?plain=1#L68). Esta funcionalidad resulta especialmente útil considerando que la ejecución completa del modelo TSDHN puede requerir entre 25 y 50 minutos.
 
-Los pasos que pueden omitirse corresponden a los definidos en `PROCESSING_PIPELINE` ubicado en [`orchestrator/core/queue.py`](orchestrator/core/queue.py?plain=1#L68).
+Las etapas omitidas se registran en el archivo `configuracion_simulacion.json` bajo el campo `skip_steps`, pero estos ajustes solo tendrán efecto al ejecutar nuevamente el CLI en modo avanzado. Si modifica manualmente este campo en el archivo de configuración, deberá ejecutar el CLI con el parámetro `--dev` para que estos cambios surtan efecto.
 
 > [!CAUTION]
-> Es importante destacar que omitir pasos **compromete la validez de los resultados** de la simulación. Este modo debe utilizarse exclusivamente para fines de depuración.
-
-> [!WARNING]
-> El CLI también guardará la configuración utilizada en este modo en el archivo `configuracion_simulacion.json`. Así que la siguiente vez que ejecutes el CLI, tratará de usar esta configuración. Para volver al modo estándar, elimina el valor `skip_steps` del archivo o elimina el archivo para que el CLI lo regenere con valores predeterminados en la siguiente ejecución.
+> Omitir etapas del pipeline **invalida los resultados** para fines operativos. Utilice este modo exclusivamente para diagnóstico técnico. Los informes generados mediante este método no deben utilizarse para análisis científicos o toma de decisiones.
 
 ## Notas adicionales
 
