@@ -247,9 +247,12 @@ class JobMonitor:
     async def _finalizar(self, client: APIClient, estado: dict) -> None:
         duration = self._format_elapsed(int(time.time() - self.start_time))
         if estado.get("status") == "completed":
+            SimpleUI.show_info("")
             SimpleUI.show_success(f"Simulación completada - Duración total: {duration}")
             if self.config.get("save_results", True):
+                SimpleUI.show_info("")
                 await self._descargar_informe(client)
+                SimpleUI.show_info("")
         else:
             SimpleUI.show_error("Simulación fallida")
             if error := estado.get("error"):
