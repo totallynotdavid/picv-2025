@@ -471,7 +471,7 @@ También puedes personalizar la configuración editando manualmente el archivo `
 
 ### Modo de desarrollo
 
-Para escenarios de depuración o desarrollo, el sistema ofrece un modo avanzado que permite controlar etapas específicas del pipeline de procesamiento (por ahora, solo `run-tsdhn` es compatible).
+Para escenarios de depuración o desarrollo, el CLI ofrece un modo avanzado que permite controlar etapas específicas del pipeline de procesamiento (por ahora, solo `run-tsdhn` es compatible).
 
 Para iniciar el CLI **en modo de desarrollo**, ejecute:
 
