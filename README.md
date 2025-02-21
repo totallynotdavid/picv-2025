@@ -457,7 +457,7 @@ Para iniciar el CLI **en modo estándar**, ejecute:
 poetry run python -m cli.cli
 ```
 
-El CLI utiliza los parámetros predeterminados definidos en [`cli/constants.py`](cli/constants.py?plain=1#L8), los cuales pueden modificarse interactivamente durante la ejecución. Al solicitar valores, simplemente presione <kbd>Enter</kbd> para conservar la configuración existente.
+El CLI utiliza los parámetros predeterminados definidos en [`cli/constants.py`](cli/constants.py?plain=1#L8), los cuales pueden modificarse interactivamente al usar el CLI. Durante el proceso, para mantener los valores predeterminados, simplemente presione <kbd>Enter</kbd> para conservar la configuración existente.
 
 El flujo de ejecución sigue tres etapas secuenciales:
 
