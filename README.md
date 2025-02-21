@@ -457,7 +457,7 @@ Para iniciar el CLI **en modo estándar**, ejecute:
 poetry run python -m cli.cli
 ```
 
-El CLI utiliza los parámetros predeterminados definidos en [`cli/constants.py`](cli/constants.py?plain=1#L8), los cuales pueden modificarse interactivamente al usar el CLI. Durante el proceso, para mantener los valores predeterminados, simplemente presione <kbd>Enter</kbd> para continuar.
+El CLI utiliza los parámetros predeterminados definidos en [`cli/constants.py`](cli/constants.py?plain=1#L8), los cuales pueden modificarse interactivamente al usar el CLI. Durante el proceso, para mantener los valores predeterminados, simplemente presiona <kbd>Enter</kbd> para continuar.
 
 El flujo de ejecución sigue tres etapas secuenciales:
 
@@ -471,18 +471,20 @@ También puedes personalizar la configuración editando manualmente el archivo `
 
 ### Modo de desarrollo
 
-Para escenarios de depuración o desarrollo, el sistema ofrece un modo avanzado que permite controlar etapas específicas del pipeline de procesamiento:
+Para escenarios de depuración o desarrollo, el sistema ofrece un modo avanzado que permite controlar etapas específicas del pipeline de procesamiento (por ahora, solo `run-tsdhn` es compatible).
+
+Para iniciar el CLI **en modo de desarrollo**, ejecute:
 
 ```bash
 poetry run python -m cli.cli --dev
 ```
 
-Este modo permite omitir componentes específicos de la cadena de procesamiento definida en `PROCESSING_PIPELINE` en [`orchestrator/core/queue.py`](orchestrator/core/queue.py?plain=1#L68). Esta funcionalidad resulta especialmente útil considerando que la ejecución completa del modelo TSDHN puede requerir entre 25 y 50 minutos.
+Este modo permite omitir componentes específicos de la cadena de procesamiento definida en `PROCESSING_PIPELINE` en [`orchestrator/core/queue.py`](orchestrator/core/queue.py?plain=1#L95). Esta funcionalidad resulta especialmente útil considerando que la ejecución completa del modelo TSDHN puede requerir entre 25 y 50 minutos.
 
-Las etapas omitidas se registran en el archivo `configuracion_simulacion.json` bajo el campo `skip_steps`, pero estos ajustes solo tendrán efecto al ejecutar nuevamente el CLI en modo avanzado. Si modifica manualmente este campo en el archivo de configuración, deberá ejecutar el CLI con el parámetro `--dev` para que estos cambios surtan efecto.
+La(s) etapa(s) omitida(s) se guardan en `configuracion_simulacion.json` en el campo `skip_steps`. Este registro es temporal y no persiste entre ejecuciones del CLI, incluso en modo desarrollo. Deberás especificar nuevamente las etapas a omitir en cada ejecución.
 
 > [!CAUTION]
-> Omitir etapas del pipeline **invalida los resultados** para fines operativos. Utilice este modo exclusivamente para diagnóstico técnico. Los informes generados mediante este método no deben utilizarse para análisis científicos o toma de decisiones.
+> **Omitir etapas invalida los resultados**. Use esta función solo para diagnóstico técnico. Los informes generados no son válidos para análisis científico ni toma de decisiones.
 
 ## Notas adicionales
 
