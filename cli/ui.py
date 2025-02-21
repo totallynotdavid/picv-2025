@@ -11,19 +11,31 @@ class SimpleUI:
         console.print("│")
 
     @staticmethod
-    def show_info(message: str):
-        if message.strip() == "":
+    def show_info(message: str, add_separator: bool = False):
+        if not message.strip():
             console.print("│")
         else:
             console.print(f"│  {message}")
+        if add_separator:
+            console.print("│")
 
     @staticmethod
-    def show_success(message: str):
+    def show_success(message: str, add_separator: bool = True):
         console.print(f"◇  {message}")
+        if add_separator:
+            console.print("│")
 
     @staticmethod
-    def show_error(message: str):
+    def show_error(message: str, add_separator: bool = True):
         console.print(f"■  Error: {message}")
+        if add_separator:
+            console.print("│")
+
+    @staticmethod
+    def prompt(prompt_text: str) -> str:
+        user_input = input(f"◇  {prompt_text}")
+        console.print("│")
+        return user_input.strip()
 
     @staticmethod
     def show_question(message: str):
