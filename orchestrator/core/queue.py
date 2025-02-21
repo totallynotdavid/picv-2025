@@ -128,11 +128,6 @@ PROCESSING_PIPELINE = [
             ("mareograma.eps", "Mareogram plot missing"),
         ],
     ),
-    ProcessingStep(
-        name="generate_reports",
-        python_callable=generate_reports_wrapper,
-        file_checks=[("reporte.pdf", "Final report PDF missing")],
-    ),
 ]
 
 TTT_MUNDO_STEPS = [
@@ -142,6 +137,28 @@ TTT_MUNDO_STEPS = [
         compiler_config=CompilerConfig("ttt_inverso.f", "ttt_inverso"),
         extra_executables=["inverse"],
         working_dir="ttt_mundo",
+        file_checks=[("ttt_mundo.dat", "TTT inverso output missing")],
+    ),
+    ProcessingStep(
+        name="point_ttt",
+        command=["./point_ttt"],
+        working_dir="ttt_mundo",
+        extra_executables=["point_ttt"],
+        file_checks=[("ttt.eps", "ttt.eps not generated")],
+    ),
+    ProcessingStep(
+        name="copy_ttt_eps",
+        command=["cp", "ttt.eps", "../ttt.eps"],
+        working_dir="ttt_mundo",
+        file_checks=[("../ttt.eps", "ttt.eps not copied to parent directory")],
+    ),
+]
+
+REPORT_STEPS = [
+    ProcessingStep(
+        name="generate_reports",
+        python_callable=generate_reports_wrapper,
+        file_checks=[("reporte.pdf", "Final report PDF missing")],
     ),
 ]
 
@@ -257,7 +274,9 @@ def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
         skip_steps = skip_steps or []
 
         # Validate skip steps
-        all_step_names = [step.name for step in PROCESSING_PIPELINE + TTT_MUNDO_STEPS]
+        all_step_names = [
+            step.name for step in PROCESSING_PIPELINE + TTT_MUNDO_STEPS + REPORT_STEPS
+        ]
         if invalid := set(skip_steps) - set(all_step_names):
             raise ValueError(f"Invalid skip steps: {invalid}")
 
@@ -282,6 +301,17 @@ def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
                 continue
 
             step_dir = job_work_dir / "ttt_mundo"
+            step_dir.mkdir(parents=True, exist_ok=True)
+            _update_job_metadata(job, f"Processing {step.name}")
+            process_step(step, step_dir)
+
+        # Process report steps
+        for step in REPORT_STEPS:
+            if step.name in skip_steps:
+                logger.info(f"Skipping step: {step.name}")
+                continue
+
+            step_dir = job_work_dir
             _update_job_metadata(job, f"Processing {step.name}")
             process_step(step, step_dir)
 
@@ -323,7 +353,8 @@ class TSDHNJob:
         try:
             # Validate skip steps before queuing
             all_step_names = [
-                step.name for step in PROCESSING_PIPELINE + TTT_MUNDO_STEPS
+                step.name
+                for step in PROCESSING_PIPELINE + TTT_MUNDO_STEPS + REPORT_STEPS
             ]
             if invalid := set(skip_steps or []) - set(all_step_names):
                 raise ValueError(f"Invalid skip steps: {invalid}")
