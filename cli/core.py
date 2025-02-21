@@ -12,7 +12,7 @@ from cli.ui import SimpleUI
 class SimulationManager:
     def __init__(self, config: Dict, dev_mode: bool = False):
         self.config = config
-        self.dev_mode = dev_mode  # Store the developer flag
+        self.dev_mode = dev_mode
         self.config_manager = ConfigManager()
 
     async def full_test_flow(self) -> Optional[str]:
@@ -20,13 +20,11 @@ class SimulationManager:
 
         async with APIClient(self.config["base_url"]) as client:
             current_base_url = self.config.get("base_url", "http://localhost:8000")
-            nuevo_base_url = input(
-                f"◇  Base URL (actual: {current_base_url}): "
+            nuevo_base_url = SimpleUI.prompt(
+                f"Base URL (actual: {current_base_url}): "
             ).strip()
             if nuevo_base_url:
                 self.config["base_url"] = nuevo_base_url
-
-            SimpleUI.show_info("")
 
             if await client.check_connection():
                 SimpleUI.show_success("Conexión a la API: OK")
@@ -34,9 +32,7 @@ class SimulationManager:
                 SimpleUI.show_error("Conexión a la API: Fallida")
                 return None
 
-            SimpleUI.show_info("")
-
-            SimpleUI.show_success("Parámetros de simulación:")
+            SimpleUI.show_success("Parámetros de simulación:", add_separator=True)
             SimpleUI.show_info(
                 "   * Magnitud (Mw): "
                 + str(self.config["simulation_params"].get("Mw", "N/D"))
@@ -58,25 +54,22 @@ class SimulationManager:
                 + str(self.config["simulation_params"].get("hhmm", "N/D"))
             )
             SimpleUI.show_info(
-                "   * Día: " + str(self.config["simulation_params"].get("dia", "N/D"))
+                "   * Día: " + str(self.config["simulation_params"].get("dia", "N/D")),
+                add_separator=True,
             )
-            SimpleUI.show_info("")
 
             self.modify_parameters()
             self.config_manager.save_config(self.config)
 
-            SimpleUI.show_info("")
-
             inicio = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
             SimpleUI.show_success(f"Análisis iniciado [{inicio}]")
-            SimpleUI.show_info("")
 
             job_id = await self._execute_calculation_steps(client)
             return job_id
 
     def modify_parameters(self):
         respuesta = (
-            input("◇  ¿Deseas modificar los parámetros? (s/n): ").strip().lower()
+            SimpleUI.prompt("¿Deseas modificar los parámetros? (s/n): ").strip().lower()
         )
         if respuesta == "s":
             for key, label in [
@@ -95,34 +88,30 @@ class SimulationManager:
                             nuevo = float(nuevo)
                         except ValueError:
                             SimpleUI.show_error(
-                                "Valor inválido, se mantiene el valor actual"
+                                "Valor inválido, se mantiene el valor actual",
+                                add_separator=False,
                             )
                             continue
                     self.config["simulation_params"][key] = nuevo
-
-        SimpleUI.show_info("")
-
-        # Only prompt for skip steps if in developer mode
-        if self.dev_mode:
-            skip_input = input(
-                "◇  [Dev] ¿Deseas omitir algún paso? "
-                "(Ingresa los pasos separados por comas): ",
-            ).strip()
-            if skip_input:
-                self.config["skip_steps"] = [
-                    step.strip() for step in skip_input.split(",") if step.strip()
-                ]
-            else:
-                self.config["skip_steps"] = []
-
             SimpleUI.show_info("")
+
+        if self.dev_mode:
+            skip_input = SimpleUI.prompt(
+                "[Dev] ¿Deseas omitir algún paso? "
+                "(Ingresa los pasos separados por comas): "
+            ).strip()
+            self.config["skip_steps"] = (
+                [step.strip() for step in skip_input.split(",") if step.strip()]
+                if skip_input
+                else []
+            )
         else:
             # For non-developers, simply set skip_steps to empty or default
             self.config["skip_steps"] = []
 
         current_interval = self.config.get("check_interval", 60)
-        new_interval = input(
-            "◇  Intervalo de actualización para monitoreo (segundos) "
+        new_interval = SimpleUI.prompt(
+            "Intervalo de actualización para monitoreo (segundos) "
             f"(actual: {current_interval}): "
         ).strip()
 
@@ -131,9 +120,9 @@ class SimulationManager:
                 self.config["check_interval"] = int(new_interval)
             except ValueError:
                 SimpleUI.show_error(
-                    "Valor inválido para intervalo, se mantiene el valor actual"
+                    "Valor inválido para intervalo, se mantiene el valor actual",
+                    add_separator=True,
                 )
-        SimpleUI.show_info("")
 
     async def _execute_calculation_steps(self, client: APIClient) -> Optional[str]:
         pasos = [
@@ -148,9 +137,10 @@ class SimulationManager:
 
             # Prepare the payload based on the endpoint:
             if endpoint == "run-tsdhn":
-                payload = {**self.config["simulation_params"]}
-                if self.config.get("skip_steps"):
-                    payload["skip_steps"] = self.config["skip_steps"]
+                payload = {
+                    **self.config["simulation_params"],
+                    "skip_steps": self.config.get("skip_steps", []),
+                }
             else:
                 payload = self.config["simulation_params"]
 
@@ -162,7 +152,8 @@ class SimulationManager:
                 )
                 dt = time.time() - t0
                 SimpleUI.show_success(
-                    f"[Endpoint {num}/{total}] {descripcion}... ({dt:.1f}s)"
+                    f"[Endpoint {num}/{total}] {descripcion}... ({dt:.1f}s)",
+                    add_separator=False,
                 )
                 resultados[endpoint] = resultado
             except Exception as e:
@@ -173,7 +164,6 @@ class SimulationManager:
         job_id = resultados.get("run-tsdhn", {}).get("job_id")
         if job_id:
             SimpleUI.show_success(f"ID de simulación: {job_id}")
-        SimpleUI.show_info("")
         return job_id
 
 
@@ -250,9 +240,7 @@ class JobMonitor:
             SimpleUI.show_info("")
             SimpleUI.show_success(f"Simulación completada - Duración total: {duration}")
             if self.config.get("save_results", True):
-                SimpleUI.show_info("")
                 await self._descargar_informe(client)
-                SimpleUI.show_info("")
         else:
             SimpleUI.show_error("Simulación fallida")
             if error := estado.get("error"):
