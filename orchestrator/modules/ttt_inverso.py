@@ -32,7 +32,7 @@ def ttt_inverso_python(working_dir: Path) -> None:
     y_str = y_fmt.format(yep)
     loc = f"{x_str}/{y_str}"
 
-    # Execute ttt_client with constructed location string
+    # Execute ttt_client
     subprocess.run(
         ["ttt_client", "cortado.i2", f"-E{loc}", "-Tttt.b", "-VL"],
         cwd=working_dir,
