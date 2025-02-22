@@ -93,6 +93,14 @@ def generate_reports_wrapper(working_dir: Path) -> None:
     validate_pdf(working_dir / "reporte.pdf")
 
 
+def copy_ttt_eps(working_dir: Path) -> None:
+    src = working_dir / "ttt.eps"
+    dst = working_dir.parent / "ttt.eps"
+    # log full paths to make it easier to debug
+    logger.debug(f"Copying {src} to {dst}")
+    shutil.copy(src, dst)
+
+
 PROCESSING_PIPELINE = [
     ProcessingStep(
         name="fault_plane",
@@ -147,7 +155,7 @@ TTT_MUNDO_STEPS = [
     ),
     ProcessingStep(
         name="copy_ttt_eps",
-        command=["cp", "ttt.eps", "../ttt.eps"],
+        python_callable=copy_ttt_eps,
         working_dir="ttt_mundo",
         file_checks=[("../ttt.eps", "ttt.eps not copied to parent directory")],
     ),
