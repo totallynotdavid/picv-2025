@@ -13,6 +13,7 @@ from rq import Queue, get_current_job
 from rq.job import Job
 
 from orchestrator.modules.reporte import generate_reports
+from orchestrator.modules.ttt_inverso import ttt_inverso_python
 from orchestrator.modules.ttt_max import process_tsunami_data
 
 logger = logging.getLogger(__name__)
@@ -133,11 +134,9 @@ PROCESSING_PIPELINE = [
 TTT_MUNDO_STEPS = [
     ProcessingStep(
         name="ttt_inverso",
-        command=["./ttt_inverso"],
-        compiler_config=CompilerConfig("ttt_inverso.f", "ttt_inverso"),
-        extra_executables=["inverse"],
+        python_callable=ttt_inverso_python,
         working_dir="ttt_mundo",
-        file_checks=[("ttt_mundo.dat", "TTT inverso output missing")],
+        file_checks=[("ttt.b", "ttt_client output missing")],
     ),
     ProcessingStep(
         name="point_ttt",
