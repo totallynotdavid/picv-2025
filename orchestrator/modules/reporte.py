@@ -1,5 +1,6 @@
 import datetime
 import shutil
+import subprocess
 from pathlib import Path
 from string import Template
 from typing import Dict, List, Tuple
@@ -22,6 +23,22 @@ MONTH_MAP = {
 
 class LatexTemplate(Template):
     delimiter = "@"
+
+
+def generate_reports_wrapper(working_dir: Path) -> None:
+    generate_reports(working_dir)
+
+    for _ in range(2):  # Compile twice to resolve references
+        subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", "reporte.tex"],
+            cwd=working_dir,
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    for f in ["reporte.aux", "reporte.out", "reporte.log", "reporte.tex"]:
+        (working_dir / f).unlink(missing_ok=True)
 
 
 def generate_reports(working_dir: Path) -> None:

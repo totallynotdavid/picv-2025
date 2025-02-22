@@ -2,7 +2,7 @@ import shutil
 from pathlib import Path
 
 from orchestrator.models.schemas import CompilerConfig, ProcessingStep
-from orchestrator.modules.reporte import generate_reports
+from orchestrator.modules.reporte import generate_reports_wrapper
 from orchestrator.modules.ttt_inverso import ttt_inverso_python
 from orchestrator.modules.ttt_max import process_tsunami_data
 
@@ -82,7 +82,7 @@ TTT_MUNDO_STEPS = [
 REPORT_STEPS = [
     ProcessingStep(
         name="generate_reports",
-        python_callable=generate_reports,
+        python_callable=generate_reports_wrapper,
         file_checks=[("reporte.pdf", "Final report PDF missing")],
     ),
 ]
