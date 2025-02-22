@@ -2,6 +2,9 @@ import shutil
 from pathlib import Path
 
 from orchestrator.models.schemas import CompilerConfig, ProcessingStep
+from orchestrator.modules.reporte import generate_reports
+from orchestrator.modules.ttt_inverso import ttt_inverso_python
+from orchestrator.modules.ttt_max import process_tsunami_data
 
 # Constants
 GRAVITY = 9.81  # m/s²
@@ -45,9 +48,7 @@ PROCESSING_PIPELINE = [
     ),
     ProcessingStep(
         name="ttt_max",
-        python_callable=lambda wd: __import__(
-            "orchestrator.modules.ttt_max"
-        ).process_tsunami_data(wd),
+        python_callable=process_tsunami_data,
         file_checks=[
             ("zfolder/green_rev.dat", "Scaled wave height data output missing"),
             ("ttt_max.dat", "TTT Max data output missing"),
@@ -59,9 +60,7 @@ PROCESSING_PIPELINE = [
 TTT_MUNDO_STEPS = [
     ProcessingStep(
         name="ttt_inverso",
-        python_callable=lambda wd: __import__(
-            "orchestrator.modules.ttt_inverso"
-        ).ttt_inverso_python(wd),
+        python_callable=ttt_inverso_python,
         working_dir="ttt_mundo",
         file_checks=[("ttt.b", "ttt_client output missing")],
     ),
@@ -83,9 +82,7 @@ TTT_MUNDO_STEPS = [
 REPORT_STEPS = [
     ProcessingStep(
         name="generate_reports",
-        python_callable=lambda wd: __import__(
-            "orchestrator.modules.reporte"
-        ).generate_reports(wd),
+        python_callable=generate_reports,
         file_checks=[("reporte.pdf", "Final report PDF missing")],
     ),
 ]
