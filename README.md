@@ -190,6 +190,12 @@ sudo apt update -y && sudo apt upgrade -y
    sudo apt install -y gfortran redis-server gmt gmt-dcw gmt-gshhg ps2eps csh
    ```
 
+   `pygmt` no reconoce `libgmt.so` ya que el link simbólico no se ha establecido:
+
+   ```bash
+   sudo ln -s /lib/x86_64-linux-gnu/libgmt.so.6 /lib/x86_64-linux-gnu/libgmt.so
+   ```
+
    Configura Redis para ser gestionado por systemd:
 
    ```bash
