@@ -13,6 +13,7 @@ append_config_block() {
     fi
 }
 
+echo -e "\n🔄 Checking if running under WSL..."
 # WSL appends Windows path to the PATH variable, 
 # which can cause issues with pyenv if pyenv is
 # installed in both Windows and WSL
@@ -26,8 +27,10 @@ else
 eval \"\$(pyenv init - bash)\""
 fi
 
+echo -e "\n📦 Updating system packages..."
 sudo apt update -y && sudo apt upgrade -y
 
+echo -e "\n📦 Installing required system dependencies..."
 REQUIRED_PKGS=(
     build-essential zlib1g-dev libffi-dev libssl-dev libbz2-dev
     libreadline-dev libsqlite3-dev liblzma-dev libncurses-dev tk-dev
@@ -45,6 +48,7 @@ fi
 
 BASHRC=~/.bashrc
 
+echo -e "\n🔧 Configuring environment paths..."
 if ! command -v pyenv &>/dev/null; then
     append_config_block "# [PYENV CONFIGURATION]" "$PYENV_CFG" "$BASHRC"
 fi
@@ -59,6 +63,7 @@ fi
 
 source "$BASHRC"
 
+echo -e "\n🐍 Setting up Python environment..."
 if [[ ! -d "$HOME/.pyenv" ]]; then
     curl -fsSL https://pyenv.run | bash
     # We have to double make sure that pyenv is available in the current shell
@@ -69,12 +74,13 @@ if [[ ! -d "$HOME/.pyenv" ]]; then
     pyenv global 3.12
 fi
 
+echo -e "\n📝 Installing Poetry package manager..."
 if ! command -v poetry &>/dev/null; then
     curl -sSL https://install.python-poetry.org | python3 -
 fi
 
+echo -e "\n🌊 Installing TTT SDK..."
 if ! command -v ttt_client &>/dev/null; then
-    echo -e "\n📦 Installing TTT SDK..."
     TMP_DIR=$(mktemp -d)
     git clone -q https://gitlab.com/totallynotdavid/tttapi/ "$TMP_DIR/tttapi"
     (
@@ -86,6 +92,7 @@ if ! command -v ttt_client &>/dev/null; then
     rm -rf "$TMP_DIR"
 fi
 
+echo -e "\n📚 Installing TeXLive..."
 if [[ ! -d "$HOME/texlive" ]]; then
     TMP_TL=$(mktemp -d)
     pushd "$TMP_TL" > /dev/null
@@ -102,6 +109,7 @@ if [[ ! -d "$HOME/texlive" ]]; then
     rm -rf "$TMP_TL"
 fi
 
+echo -e "\n🔧 Configuring Redis for systemd management..."
 REDIS_CONF="/etc/redis/redis.conf"
 if ! sudo grep -q "^supervised systemd" "$REDIS_CONF"; then
     sudo cp "$REDIS_CONF" "${REDIS_CONF}.bak"
@@ -109,5 +117,8 @@ if ! sudo grep -q "^supervised systemd" "$REDIS_CONF"; then
     sudo sed -i 's/^supervised .*/supervised systemd/' "$REDIS_CONF"
     sudo systemctl restart redis-server
 fi
+
+echo -e "\n🗺️ Setting up GMT library for pygmt..."
+sudo ln -sf /lib/x86_64-linux-gnu/libgmt.so.6 /lib/x86_64-linux-gnu/libgmt.so
 
 echo -e "\n✅ Environment configured successfully"
