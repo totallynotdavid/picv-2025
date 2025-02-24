@@ -1,9 +1,32 @@
 import logging
 from pathlib import Path
+from typing import Dict
 
 import pygmt
 
 logger = logging.getLogger(__name__)
+
+
+def read_meca_spec(meca_file: Path) -> Dict[str, float]:
+    with meca_file.open("r") as f:
+        line = f.readline().strip()
+    values = line.split()
+    if len(values) != 10:
+        raise ValueError(f"Meca file {meca_file} does not contain exactly 10 values.")
+
+    spec = {
+        "longitude": float(values[0]),
+        "latitude": float(values[1]),
+        "depth": float(values[2]),
+        "strike": float(values[3]),
+        "dip": float(values[4]),
+        "rake": float(values[5]),
+        "magnitude": float(values[6]),
+        "plot_longitude": float(values[7]),
+        "plot_latitude": float(values[8]),
+        "event_name": f"s{values[9]}" if not values[9].startswith("s") else values[9],
+    }
+    return spec
 
 
 def generate_ttt_map(working_dir: Path) -> None:
@@ -11,6 +34,11 @@ def generate_ttt_map(working_dir: Path) -> None:
     Generate a TTT map using GMT via pygmt.
     Validates input files, configures GMT settings, creates the plot,
     and saves it as an EPS file.
+
+    Expected files:
+        - "cortado.i2" (grid file)
+        - "ttt.b" (contour file)
+        - "meca.dat" (meca file, located in the parent directory of working_dir)
     """
     region = [120.0, 300.0, -65.0, 61.0]
     projection = "M16c"
@@ -25,13 +53,12 @@ def generate_ttt_map(working_dir: Path) -> None:
     # Path definitions
     grd_file = working_dir / grd_filename
     tttb_file = working_dir / tttb_filename
-    cmt_file = working_dir.parent / "meca.dat"
+    meca_file = working_dir.parent / "meca.dat"
     output_file = working_dir / "ttt.eps"
 
     try:
         # Validate input files
-        required_files = [grd_file, tttb_file, cmt_file]
-        for file in required_files:
+        for file in (grd_file, tttb_file, meca_file):
             if not file.exists():
                 raise FileNotFoundError(f"Required file {file} not found.")
 
@@ -47,16 +74,15 @@ def generate_ttt_map(working_dir: Path) -> None:
         fig = pygmt.Figure()
 
         # Create color palette
-        pygmt.makecpt(
-            cmap="globe", output=str(working_dir / "color.cpt"), continuous=True
-        )
+        color_cpt = working_dir / "color.cpt"
+        pygmt.makecpt(cmap="globe", output=str(color_cpt), continuous=True)
 
         # Plot grid image
         fig.grdimage(
             grid=f"{grd_file}{grd_params}",
             region=region,
             projection=projection,
-            cmap=str(working_dir / "color.cpt"),
+            cmap=str(color_cpt),
         )
 
         # Add coastlines
@@ -65,7 +91,7 @@ def generate_ttt_map(working_dir: Path) -> None:
             projection=projection,
             frame=frame_parameters,
             resolution="l",
-            borders=["1/0.5p,30"],  # N1
+            borders=["1/0.5p,30"],
             shorelines="0.5,30",
         )
 
@@ -79,9 +105,12 @@ def generate_ttt_map(working_dir: Path) -> None:
             pen=["c1.,30,-", "a1.,30,-"],
         )
 
+        spec = read_meca_spec(meca_file)
+        logger.info("Parsed meca spec: %s", spec)
+
         # Add focal mechanisms
         fig.meca(
-            cmt_file,
+            spec=spec,
             region=region,
             projection=projection,
             scale="0.29c",
@@ -102,5 +131,5 @@ def generate_ttt_map(working_dir: Path) -> None:
         # Cleanup on failure if output file exists
         if output_file.exists():
             output_file.unlink()
-        logger.exception(f"TTT map generation failed: {e}")
+        logger.exception("TTT map generation failed: %s", e)
         raise RuntimeError(f"TTT map generation failed: {e}") from e
