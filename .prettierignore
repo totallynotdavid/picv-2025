@@ -1,5 +1,8 @@
-htmlcov/
+# Folders
 model/
 jobs/
+
+# Generated folders
+htmlcov/
 .ruff_cache/
 .pytest_cache/

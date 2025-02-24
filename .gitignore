@@ -1,10 +1,16 @@
-*/ruff_cache/*
-*.npy
-**/__pycache__/*
-*.txt
-*.log
-*.json
-*.pdf
-
-.coverage
+# Folders
 /jobs/
+
+# Files
+configuracion_*.json
+informe*.pdf
+
+# Extensions
+*.npy
+*.log
+
+# Generated Folders
+.coverage/
+*/ruff_cache/*
+**/__pycache__/*
+.ruff_cache/
