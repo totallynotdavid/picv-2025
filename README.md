@@ -51,7 +51,7 @@ flowchart TB
 > [!TIP]
 > Ejecuta `bash utils/setup-env.sh` para instalar todos las dependencias mencionados en la sección de prerrequisitos. Además, asegúrate de darle permisos de ejecución con `chmod +x utils/setup-env.sh`.
 
-**Prerrequisitos:**
+### Prerrequisitos
 
 Actualice los paquetes del sistema antes de iniciar:
 
@@ -190,7 +190,13 @@ sudo apt update -y && sudo apt upgrade -y
    sudo apt install -y gfortran redis-server gmt gmt-dcw gmt-gshhg ps2eps csh
    ```
 
-   Configura Redis para ser gestionado por systemd:
+   [`pygmt`](https://www.pygmt.org/latest/) requiere un enlace simbólico para funcionar correctamente:
+
+   ```bash
+   sudo ln -s /lib/x86_64-linux-gnu/libgmt.so.6 /lib/x86_64-linux-gnu/libgmt.so
+   ```
+
+   Configura Redis para usar systemd:
 
    ```bash
    sudo sed -i 's/^# \?supervised \(no\|auto\)/supervised systemd/' /etc/redis/redis.conf
@@ -199,7 +205,7 @@ sudo apt update -y && sudo apt upgrade -y
 
 6. Si necesitas ejecutar la interfaz gráfica original ([<kbd>tsunami.m</kbd>](model/tsunami.m)), puedes instalar [MATLAB R2014](https://drive.google.com/file/d/1VhLnwXX78Y7O8huwlRuE-shOW2LKlVpd/view?usp=drive_link).
 
-**Pasos de instalación:**
+### Iniciar el proyecto
 
 1. Clona el repositorio e instala las dependencias:
 

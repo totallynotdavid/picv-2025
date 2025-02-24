@@ -2,14 +2,15 @@ import shutil
 from pathlib import Path
 
 from orchestrator.models.schemas import CompilerConfig, ProcessingStep
+from orchestrator.modules.point_ttt import generate_ttt_map
 from orchestrator.modules.reporte import generate_reports_wrapper
 from orchestrator.modules.ttt_inverso import ttt_inverso_python
 from orchestrator.modules.ttt_max import process_tsunami_data
 
 # Constants
-GRAVITY = 9.81  # m/s²
-EARTH_RADIUS = 6370.8  # km
-MODEL_DIR = Path("model")
+GRAVITY: float = 9.81  # m/s²
+EARTH_RADIUS: float = 6370.8  # km
+MODEL_DIR: Path = Path("model")
 
 # Logging configuration
 LOGGING_CONFIG = {
@@ -66,7 +67,7 @@ TTT_MUNDO_STEPS = [
     ),
     ProcessingStep(
         name="point_ttt",
-        command=["./point_ttt"],
+        python_callable=generate_ttt_map,
         working_dir="ttt_mundo",
         extra_executables=["point_ttt"],
         file_checks=[("ttt.eps", "ttt.eps not generated")],

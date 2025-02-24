@@ -7,7 +7,7 @@ authors = [
 ]
 license = {text = "MIT"}
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi (>=0.115.7,<0.116.0)",
     "uvicorn (>=0.34.0,<0.35.0)",
@@ -16,6 +16,7 @@ dependencies = [
     "numpy (==2.2.2)",
     "redis (>=5.2.1,<6.0.0)",
     "rq (>=2.1.0,<3.0.0)",
+    "pygmt (>=0.14.2,<0.15.0)",
 ]
 
 [build-system]
@@ -70,4 +71,5 @@ line-ending = "auto"
 [tool.poe.tasks]
 dev = { shell = "uvicorn orchestrator.main:app --reload --reload-dir orchestrator" }
 db = { shell = "rq worker tsdhn_queue" }
+clean = { shell = "rm -rf jobs configuracion_simulacion.json informe*.pdf" }
 format = { shell = "ruff format && ruff check --fix" }
