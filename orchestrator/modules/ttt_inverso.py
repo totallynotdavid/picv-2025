@@ -1,21 +1,34 @@
+import logging
 import subprocess
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def ttt_inverso_python(working_dir: Path) -> None:
     """
-    Reads coordinates from meca.dat, formats them, and executes ttt_client
-    and grdmath commands.
+    Read coordinates from meca.dat, format them, and execute:
+    - ttt_client
+    - grdmath (not yet implemented in pygmt)
+
+    Args:
+        working_dir: The working directory for the ttt_inverso process.
     """
     meca_path = working_dir.parent / "meca.dat"
+    if not meca_path.exists():
+        raise FileNotFoundError(f"Required file {meca_path} not found.")
+
     with open(meca_path, "r") as f:
         parts = f.readline().strip().split()
         if len(parts) < 2:
             raise ValueError(
                 f"Invalid meca.dat format: not enough values in {meca_path}"
             )
-        xep = float(parts[0])
-        yep = float(parts[1])
+        try:
+            xep = float(parts[0])
+            yep = float(parts[1])
+        except ValueError as e:
+            raise ValueError(f"Invalid coordinate values in {meca_path}: {e}") from e
 
     # Determine formatting based on yep's value
     if yep <= -10.0:
@@ -28,24 +41,33 @@ def ttt_inverso_python(working_dir: Path) -> None:
         x_fmt, y_fmt = "{:6.2f}", "{:5.2f}"
 
     # Format coordinates
-    x_str = x_fmt.format(xep)
-    y_str = y_fmt.format(yep)
-    loc = f"{x_str}/{y_str}"
+    loc = f"{x_fmt.format(xep)}/{y_fmt.format(yep)}"
+    logger.info(f"Formatted location: {loc}")
 
-    # Execute ttt_client
-    subprocess.run(
-        ["ttt_client", "cortado.i2", f"-E{loc}", "-Tttt.b", "-VL"],
-        cwd=working_dir,
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-    )
+    # Execute ttt_client command
+    try:
+        subprocess.run(
+            ["ttt_client", "cortado.i2", f"-E{loc}", "-Tttt.b", "-VL"],
+            cwd=working_dir,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        logger.info("ttt_client executed successfully.")
+    except subprocess.CalledProcessError as e:
+        logger.exception(f"ttt_client execution failed: {e}")
+        raise
 
     # Process output grid with grdmath
-    subprocess.run(
-        ["gmt", "grdmath", "ttt.b=bf", "1.0", "MUL", "=", "ttt.b=bf"],
-        cwd=working_dir,
-        check=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-    )
+    try:
+        subprocess.run(
+            ["gmt", "grdmath", "ttt.b=bf", "1.0", "MUL", "=", "ttt.b=bf"],
+            cwd=working_dir,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        logger.info("grdmath executed successfully.")
+    except subprocess.CalledProcessError as e:
+        logger.exception(f"grdmath execution failed: {e}")
+        raise

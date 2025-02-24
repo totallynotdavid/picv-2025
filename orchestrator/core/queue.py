@@ -9,14 +9,9 @@ from redis.exceptions import ConnectionError
 from rq import Queue, get_current_job
 from rq.job import Job
 
-from orchestrator.core.config import (
-    MASTER_PIPELINE,
-    MODEL_DIR,
-)
+from orchestrator.core.config import MASTER_PIPELINE, MODEL_DIR
 from orchestrator.models.schemas import JobStatus
-from orchestrator.utils.file_utils import (
-    setup_workspace,
-)
+from orchestrator.utils.file_utils import setup_workspace
 from orchestrator.utils.processing import process_step
 from orchestrator.utils.system import check_dependencies
 
@@ -29,15 +24,25 @@ def _update_job_metadata(job: Optional[Job], details: str, **kwargs) -> None:
         job.save_meta()
 
 
-def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
+def _validate_skip_steps(skip_steps: List[str]) -> None:
+    all_step_names = [step.name for step in MASTER_PIPELINE]
+    invalid = set(skip_steps) - set(all_step_names)
+    if invalid:
+        raise ValueError(f"Invalid skip steps: {invalid}")
+
+
+def execute_tsdhn_commands(job_id: str, skip_steps: Optional[List[str]] = None) -> Dict:
     job = get_current_job()
-    job_work_dir = None
+    job_work_dir: Optional[Path] = None
+    skip_steps = skip_steps or []
+    _validate_skip_steps(skip_steps)
 
     try:
         _update_job_metadata(
             job, "Initializing environment", status=JobStatus.RUNNING.value
         )
         logger.info(f"Starting TSDHN execution for job {job_id}")
+
         check_dependencies()
 
         # Setup workspace
@@ -45,11 +50,6 @@ def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
         base_model_dir = repo_root / MODEL_DIR
         job_work_dir = repo_root / "jobs" / job_id
         setup_workspace(base_model_dir, job_work_dir)
-
-        skip_steps = skip_steps or []
-        all_step_names = [step.name for step in MASTER_PIPELINE]
-        if invalid := set(skip_steps) - set(all_step_names):
-            raise ValueError(f"Invalid skip steps: {invalid}")
 
         # Process all steps in single loop
         for step in MASTER_PIPELINE:
@@ -87,7 +87,9 @@ def execute_tsdhn_commands(job_id: str, skip_steps: List[str] = None) -> Dict:
 
 
 class TSDHNJob:
-    def __init__(self, redis_host="localhost", redis_port=6379, redis_db=0):
+    def __init__(
+        self, redis_host: str = "localhost", redis_port: int = 6379, redis_db: int = 0
+    ):
         self.redis = Redis(
             host=redis_host,
             port=redis_port,
@@ -97,18 +99,15 @@ class TSDHNJob:
         )
         self.queue = Queue("tsdhn_queue", connection=self.redis)
 
-    def enqueue_job(self, skip_steps: List[str] = None) -> str:
+    def enqueue_job(self, skip_steps: Optional[List[str]] = None) -> str:
+        skip_steps = skip_steps or []
+        _validate_skip_steps(skip_steps)
         try:
-            # Validate skip steps before queuing
-            all_step_names = [step.name for step in MASTER_PIPELINE]
-            if invalid := set(skip_steps or []) - set(all_step_names):
-                raise ValueError(f"Invalid skip steps: {invalid}")
-
             job_id = str(uuid.uuid4())
             self.queue.enqueue(
                 execute_tsdhn_commands,
                 job_id,
-                skip_steps=skip_steps or [],
+                skip_steps=skip_steps,
                 job_id=job_id,
                 job_timeout="2h",
                 result_ttl=86400,

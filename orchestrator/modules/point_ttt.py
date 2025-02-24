@@ -1,61 +1,101 @@
-import subprocess
-import os
+import logging
+from pathlib import Path
 
-def generate_ttt_map():
-    # Set parameters
-    region = "120.0/300.0/-65.0/61.0"
-    size = "M16c"
+import pygmt
+
+logger = logging.getLogger(__name__)
+
+
+def generate_ttt_map() -> None:
+    """
+    Generate a TTT map using GMT via pygmt.
+    Validates input files, configures GMT settings, creates the plot,
+    and saves it as an EPS file.
+    """
+    region = [120.0, 300.0, -65.0, 61.0]  # WEST, EAST, SOUTH, NORTH
+    projection = "M16c"
     axis = "a20f10WsNe"
-    grdfile = "cortado.i2"
-    cptfile = "color.cpt"
-    tttbfile = "ttt.b"
-    psfile = "ttt.ps"
-    cmtfile = "../meca.dat"
+    grd_file = "cortado.i2=bs"
+    tttb_file = "ttt.b=bf"
+    cmt_file = "../meca.dat"
+    output_file = "ttt.eps"
 
-    # Set GMT defaults
-    subprocess.run(["gmt", "set", "MAP_FRAME_TYPE=plain"])
-    subprocess.run(["gmt", "set", "FONT_ANNOT_PRIMARY=9p"])
-    subprocess.run(["gmt", "set", "FONT_LABEL=9p"])
-    subprocess.run(["gmt", "set", "FONT_TITLE=9p"])
-    subprocess.run(["gmt", "set", "PS_MEDIA=A4"])
+    try:
+        # Validate input files
+        required_files = [
+            Path(grd_file.split("=")[0]),
+            Path(tttb_file.split("=")[0]),
+            Path(cmt_file),
+        ]
+        for file in required_files:
+            if not file.exists():
+                raise FileNotFoundError(f"Required file {file} not found.")
 
-    # Create color palette
-    with open(cptfile, "w") as f:
-        subprocess.run(["gmt", "makecpt", "-Cglobe", "-Z"], stdout=f)
+        # Configure GMT settings
+        pygmt.config(
+            MAP_FRAME_TYPE="plain",
+            FONT_ANNOT_PRIMARY="9p",
+            FONT_LABEL="9p",
+            FONT_TITLE="9p",
+            PS_MEDIA="A4",
+        )
 
-    # Start building the PostScript file
-    with open(psfile, "w") as ps:
-        # Grid image
-        subprocess.run([
-            "gmt", "grdimage", f"{grdfile}=bs",
-            "-R"+region, "-J"+size,
-            "-C"+cptfile, "-K", "-P"
-        ], stdout=ps)
+        fig = pygmt.Figure()
 
-        # Coastlines
-        subprocess.run([
-            "gmt", "pscoast",
-            "-R"+region, "-J"+size,
-            "-B"+axis, "-Dl", "-N1",
-            "-W0.5,30", "-Ggray", "-P", "-O", "-K"
-        ], stdout=ps)
+        # Create color palette
+        pygmt.makecpt(cmap="globe", output="color.cpt", continuous=True)
 
-        # Contours
-        subprocess.run([
-            "gmt", "grdcontour", f"{tttbfile}=bf",
-            "-R"+region, "-J"+size,
-            "-C1", "-A1.f1+uh",
-            "-Wc1.,30,-", "-Wa1.,30,-",
-            "-K", "-O", "-P", "-V"
-        ], stdout=ps)
+        # Plot grid image
+        fig.grdimage(
+            grid=grd_file,
+            region=region,
+            projection=projection,
+            cmap="color.cpt",
+        )
 
-        # Focal mechanisms
-        subprocess.run([
-            "gmt", "psmeca", cmtfile,
-            "-R"+region, "-J"+size,
-            "-Sa0.29c", "-G0/0/0", "-P", "-O", "-V", "-K"
-        ], stdout=ps)
+        # Add coastlines
+        fig.coast(
+            region=region,
+            projection=projection,
+            frame=axis,
+            resolution="l",
+            borders=["1/0.5p,30"],  # N1
+            shorelines="0.5,30",
+            land="gray",
+            water="white",
+        )
 
-    # Finalize PS file and convert to EPS
-    subprocess.run(["ps2eps", "-f", psfile])
-    os.remove(psfile)
+        # Add contour lines
+        fig.grdcontour(
+            grid=tttb_file,
+            region=region,
+            projection=projection,
+            levels=1,
+            annotation="1+f1+uh",
+            pen=["c1.0,30,-", "a1.0,30,-"],
+        )
+
+        # Add focal mechanisms
+        fig.meca(
+            spec=cmt_file,
+            region=region,
+            projection=projection,
+            scale="a0.29c",
+            color="0/0/0",
+        )
+
+        # Save output as EPS
+        fig.save(output_file)
+
+        # Verify output creation
+        if not Path(output_file).exists():
+            raise RuntimeError("Failed to generate TTT EPS file.")
+
+        logger.info("TTT map generated successfully.")
+
+    except Exception as e:
+        # Cleanup on failure if output file exists
+        if Path(output_file).exists():
+            Path(output_file).unlink()
+        logger.exception(f"TTT map generation failed: {e}")
+        raise RuntimeError(f"TTT map generation failed: {e}") from e
