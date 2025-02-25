@@ -58,23 +58,22 @@ def process_maximo_grid(work_dir: Path) -> None:
 def generate_maxola_plot(work_dir: Path) -> None:
     pygmt.config(
         MAP_FRAME_TYPE="plain",
-        FORMAT_FLOAT_OUT="%.2f",
-        PS_MEDIA="A4",
         FONT_ANNOT_PRIMARY="12p",
         FONT_LABEL="12p",
+        FONT_TITLE="12p",
+        PS_MEDIA="A4",
     )
 
     depth_cpt, hgt_cpt = create_custom_cpt(work_dir)
     process_maximo_grid(work_dir)
 
-    # Convert grid without grdadjust
+    # grdadjust is not available in pygmt
     subprocess.run(
         [
             "gmt",
             "grdconvert",
             str(work_dir / "maximo.grd"),
             "-G" + str(work_dir / "maxola.grd"),
-            "-V",
         ],
         check=True,
     )
@@ -95,6 +94,7 @@ def generate_maxola_plot(work_dir: Path) -> None:
         borders=["1/0.5p,black"],
         resolution="i",
         land="gray",
+        frame=["WSen", "xa20f10", "ya20f10"],  # Adds frame to the map
     )
 
     # Add the stations
