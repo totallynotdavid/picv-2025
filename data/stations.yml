@@ -1,0 +1,58 @@
+stations:
+  # Active stations
+  - lon: 278.7173
+    lat: -4.5751
+    code: TALA
+    name: Talara
+    active: true
+    annotation_offset: 0.1c
+  - lon: 282.8333
+    lat: -12.068883
+    code: CALL
+    name: Callao
+    active: true
+    annotation_offset: 0.1c
+  - lon: 287.8912
+    lat: -17.001
+    code: MATA
+    name: Matarani
+    active: true
+    annotation_offset: 0.1c
+  
+  # Inactive stations
+  - lon: 281.0182
+    lat: -8.227931
+    code: Salav
+    name: Salaverry
+    active: false
+    annotation_offset: 0.1c
+  - lon: 281.3872
+    lat: -9.076253
+    code: Chimb
+    name: Chimbote
+    active: false
+    annotation_offset: 0.1c
+  - lon: 281.8384
+    lat: -10.071803
+    code: Huar
+    name: Huarmey
+    active: false
+    annotation_offset: 0.1c
+  - lon: 282.3838
+    lat: -11.1218
+    code: Huacho
+    name: Huacho
+    active: false
+    annotation_offset: 0.1c
+  - lon: 283.7081
+    lat: -13.806111
+    code: Pisco
+    name: Pisco
+    active: false
+    annotation_offset: 0.1c
+  - lon: 284.8397
+    lat: -15.3556
+    code: Marc
+    name: Marcona
+    active: false
+    annotation_offset: 0.1c
