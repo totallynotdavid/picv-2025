@@ -135,7 +135,7 @@ def generate_maxola_plot(work_dir: Path) -> None:
         )
 
     # Add the beach balls
-    spec = read_meca_spec(str(work_dir / "meca.dat"))
+    spec = read_meca_spec(work_dir / "meca.dat")
     fig.meca(
         spec=spec,
         scale="0.23c",
@@ -147,7 +147,7 @@ def generate_maxola_plot(work_dir: Path) -> None:
     fig.text(x=210, y=-10, text="+", font="16p,0,black", justify="CM")
     fig.text(x=210, y=10, text="PACIFIC OCEAN", font="10p,0,black", justify="CB")
 
-    fig.psconvert(prefix=str(work_dir / "maxola"), fmt="eps", trim=True, verbose="e")
+    fig.psconvert(prefix=str(work_dir / "maxola"), fmt="E")
 
     # Cleanup
     for f in [work_dir / "maximo.grd", work_dir / "maxola.grd", hgt_cpt, depth_cpt]:
