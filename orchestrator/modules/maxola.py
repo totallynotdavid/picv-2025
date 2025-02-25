@@ -43,11 +43,20 @@ def process_maximo_grid(work_dir: Path) -> None:
     max_val = np.nanmax(mirrored)
     normalized = (12.0 * mirrored) / (max_val + 1e-9)
 
+    # Calculate values
+    DX = 7412.9951096
+    cellsize = DX / 1000.0 / 111.1994
+    xllcorner = 128.02777778
+    yllcorner = -76.00555556
+
     output_grid = work_dir / "maximo.grd"
     with open(output_grid, "w") as f:
-        f.write(f"ncols {ia}\nnrows {ja}\n")
-        f.write("xllcorner 128.027778\nyllcorner -76.005555\n")
-        f.write("cellsize 0.066667\nnodata_value -9999\n")
+        f.write(f"ncols {ia}\n")
+        f.write(f"nrows {ja}\n")
+        f.write("xllcorner {:.8f}\n".format(xllcorner))
+        f.write("yllcorner {:.8f}\n".format(yllcorner))
+        f.write("cellsize {:.8f}\n".format(cellsize))
+        f.write("nodata_value -9999\n")
 
         # Fortran-style fixed-width formatting
         np.savetxt(
