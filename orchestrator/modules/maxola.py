@@ -30,9 +30,6 @@ def create_custom_cpt(work_dir: Path) -> Tuple[Path, Path]:
 
 
 def process_maximo_grid(work_dir: Path) -> None:
-    with open(work_dir / "meca.dat") as f:
-        mw = float(f.readline().split()[6])
-
     grid_path = work_dir / "zfolder" / "zmax_a.grd"
     data = np.loadtxt(grid_path)
     ia, ja = 2461, 2056
@@ -144,8 +141,10 @@ def generate_maxola_plot(work_dir: Path) -> None:
     )
 
     # Add legend: 'Pacific Ocean' and '+' sign at the center
-    fig.text(x=210, y=-10, text="+", font="16p,0,black", justify="CM")
-    fig.text(x=210, y=10, text="PACIFIC OCEAN", font="10p,0,black", justify="CB")
+    fig.text(x=210, y=-10, text="+", font="16p,Helvetica-Bold,black", justify="CM")
+    fig.text(
+        x=210, y=10, text="PACIFIC OCEAN", font="10p,Helvetica-Bold,black", justify="CB"
+    )
 
     fig.psconvert(prefix=str(work_dir / "maxola"), fmt="E")
 
