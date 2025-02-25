@@ -2,6 +2,7 @@ import shutil
 from pathlib import Path
 
 from orchestrator.models.schemas import CompilerConfig, ProcessingStep
+from orchestrator.modules.maxola import generate_maxola_plot
 from orchestrator.modules.point_ttt import generate_ttt_map
 from orchestrator.modules.reporte import generate_reports_wrapper
 from orchestrator.modules.ttt_inverso import ttt_inverso_python
@@ -42,10 +43,9 @@ PROCESSING_PIPELINE = [
         ],
     ),
     ProcessingStep(
-        name="maxola.csh",
-        command=["./maxola.csh"],
+        name="maxola",
+        python_callable=generate_maxola_plot,
         file_checks=[("maxola.eps", "Maxola output missing")],
-        extra_executables=["espejo"],
     ),
     ProcessingStep(
         name="ttt_max",
