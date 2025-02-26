@@ -14,33 +14,80 @@ El Orchestrator-TSDHN es una herramienta para la estimación de parámetros de t
 A continuación, se muestra un diagrama que ilustra el flujo general del Orchestrator-TSDHN:
 
 ```mermaid
-flowchart TB
-    subgraph "Orchestrator-TSDHN v0.1.0"
-        subgraph Endpoints["Endpoints de la API"]
-            Calculate["/calculate
-            Cálculo de parámetros sísmicos"]
-            TravelTimes["/tsunami-travel-times
-            Tiempos de arribo"]
-            RunModel["/run-tsdhn
-            Ejecución de simulación"]
+flowchart LR
+    classDef client fill:#e8f4ff,stroke:#3a7dbd,stroke-width:1px;
+    classDef api fill:#f0f7ff,stroke:#3a7dbd,stroke-width:1px;
+    classDef job fill:#e6f4f9,stroke:#2d7d9a,stroke-width:1px;
+    classDef core fill:#e8f7e9,stroke:#2e7d32,stroke-width:1px;
+    classDef storage fill:#f5f0ff,stroke:#5e4d9b,stroke-width:1px;
+    classDef orchestrator fill:#fff4e6,stroke:#cc7a00,stroke-width:1px;
+    classDef queue fill:#ffe6e6,stroke:#b71c1c,stroke-width:1px;
+    linkStyle default stroke:#666,stroke-width:1.5px
+
+    subgraph ClientLayer["Client Layer"]
+        WebApp["**Next.js Web App**<br>- Dashboard<br>- Simulation Config<br>- Results Viewer"]
+        ExternalClient["**External Systems**<br>- Monitoring<br>- Alerts"]
+    end
+
+    subgraph APILayer["**API Gateway Layer** (FastAPI)"]
+        APIEndpoints["**REST API Endpoints**"]
+
+        subgraph ModelAPIs["**Model Computation APIs**"]
+            Calculate["`**POST /calculate**
+            Computes seismic parameters
+            Returns: JobID`"]
+            TravelTimes["`**POST /tsunami-travel-times**
+            Computes arrival estimates
+            Returns: JobID`"]
+            RunModel["`**POST /run-tsdhn**
+            Triggers simulation
+            Returns: JobID`"]
         end
 
-        subgraph Core["Procesamiento"]
-            Calculator["Class TsunamiCalculator"]
-            ModelFiles["Modelo
-            (hypo.dat + job.run)"]
-        end
-
-        subgraph Output["Resultados"]
-            Files["PDF + salida.txt"]
+        subgraph JobAPIs["**Job Management APIs**"]
+            JobStatus["`**GET /job-status/{job_id}**
+            Returns: State, Progress`"]
+            Download["`**GET /job-result/{job_id}**
+            Returns: Results (Zip)`"]
         end
     end
 
-    Calculate --> Calculator
-    TravelTimes --> Calculator
-    Calculator --> ModelFiles
-    RunModel --> ModelFiles
-    ModelFiles --> Files
+    subgraph Orchestrator["**Orchestration Layer** (RQ, Python)"]
+        Queue["**Redis Queue**<br>(Job Management)"]:::queue
+        ModelRunner["**main.py**<br>(Runs pipeline steps)"]
+
+        subgraph PreCalc["**Pre-calculation Core**"]
+            TsunamiCalc["**calculastor.py**<br>- calculate_earthquake()<br>- calculate_travel_times()<br>- validate_input()"]
+        end
+
+        subgraph CoreEngine["**Core Processing Engine**"]
+            TSDHN_Engine["**TSDHN Steps**<br>- fault_plane<br>- deform<br>- tsunami"]
+            Visualization["**Visualization**<br>- maxola<br>- ttt_inverso<br>- point_ttt<br>- ttt_max"]
+            Reporting["**Reporting**<br>- generate_reports"]
+        end
+    end
+
+    subgraph StorageLayer["**Storage Layer**"]
+        JobStorage["**Job Workspace**<br>(/jobs/{job_id})<br>- input/<br>- intermediate/<br>- output/"]
+        ResultsDB["**Results Database** (Optional)<br>- Metadata<br>- Metrics<br>- History"]
+    end
+
+    WebApp --> APIEndpoints
+    ExternalClient --> APIEndpoints
+    APIEndpoints --> ModelAPIs & JobAPIs
+
+    Calculate --> TsunamiCalc
+    TravelTimes --> TsunamiCalc
+    RunModel --> Queue
+    Queue --> ModelRunner
+    ModelRunner --> TSDHN_Engine
+    TsunamiCalc --> TSDHN_Engine
+    TSDHN_Engine --> Visualization
+    Visualization --> Reporting
+    Reporting --> JobStorage
+    JobStorage --> ResultsDB
+    JobStatus --> Queue
+    Download --> JobStorage
 ```
 
 ## Instalación
@@ -48,10 +95,10 @@ flowchart TB
 > [!WARNING]
 > El proyecto requiere **Ubuntu 20.04** o superior. Usuarios de Windows deben configurar Windows Subsystem for Linux (WSL 2.0 o superior) siguiendo la [<kbd>guía oficial</kbd>](https://learn.microsoft.com/es-es/windows/wsl/install) de Microsoft antes de continuar.
 
+### Prerrequisitos
+
 > [!TIP]
 > Ejecuta `bash utils/setup-env.sh` para instalar todos las dependencias mencionados en la sección de prerrequisitos. Además, asegúrate de darle permisos de ejecución con `chmod +x utils/setup-env.sh`.
-
-### Prerrequisitos
 
 Actualice los paquetes del sistema antes de iniciar:
 

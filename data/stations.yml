@@ -18,7 +18,7 @@ stations:
     name: Matarani
     active: true
     annotation_offset: 0.1c
-  
+
   # Inactive stations
   - lon: 281.0182
     lat: -8.227931
