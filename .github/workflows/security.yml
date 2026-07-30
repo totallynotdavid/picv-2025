@@ -49,7 +49,7 @@ jobs:
         steps:
             - uses: actions/checkout@v7
 
-            - uses: astral-sh/setup-uv@6a191366842ac1502ba6c07e9b5acd5c2d9d8db3 # 8.3.2
+            - uses: astral-sh/setup-uv@094aa226ed0e8f079adf9b0803105ffdac7bb465 # 8.3.2
               with:
                   version: ${{ env.UV_VERSION }}
                   enable-cache: true
