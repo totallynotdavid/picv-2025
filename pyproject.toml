@@ -18,7 +18,7 @@ tsdhn-api = { workspace = true }
 
 [dependency-groups]
 dev = [
-    "ruff==0.15.20",
+    "ruff==0.16.2",
     "mypy==2.2.0",
     "types-PyYAML==6.0.12.20260518",
     "pytest==9.1.1",
