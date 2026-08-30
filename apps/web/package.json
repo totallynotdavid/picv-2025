@@ -10,6 +10,10 @@
     "prepare": "svelte-kit sync || echo ''",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "test": "vitest run --exclude 'src/**/*.integration.test.ts'",
+    "test:integration": "vitest run src/lib/server/simulations.integration.test.ts",
+    "test:watch": "vitest --exclude 'src/**/*.integration.test.ts'",
+    "test:coverage": "vitest run --exclude 'src/**/*.integration.test.ts' --coverage",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
@@ -27,7 +31,6 @@
   },
   "devDependencies": {
     "@better-auth/drizzle-adapter": "~1.6.23",
-    "@libsql/client": "^0.17.4",
     "@sveltejs/adapter-auto": "^7.0.1",
     "@sveltejs/adapter-node": "^5.5.7",
     "@sveltejs/kit": "^2.69.1",
@@ -37,15 +40,18 @@
     "@tailwindcss/vite": "^4.3.2",
     "@types/geojson": "^7946.0.16",
     "@types/node": "^26.1.0",
+    "@vitest/coverage-v8": "^4.1.11",
     "auth": "~1.6.23",
     "better-auth": "~1.6.23",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "mdsvex": "^0.12.7",
+    "postgres": "^3.4.7",
     "svelte": "^5.56.4",
     "svelte-check": "^4.7.2",
     "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
-    "vite": "^8.1.3"
+    "vite": "^8.1.3",
+    "vitest": "^4.1.11"
   }
 }

@@ -1,16 +1,17 @@
 import subprocess
 from pathlib import Path
+from typing import Self
 
 import numpy as np
+import pygmt
 import pytest
 from pygmt.enums import GridRegistration, GridType
 
-from tsdhn.pipeline.types import ProcessingStep, ToolRunner
+from tsdhn.pipeline.types import ProcessingStep
 from tsdhn.render import ttt_inverso
 from tsdhn.render.maxola import GridConfig, load_stations, process_grid
 from tsdhn.runtime import (
     REQUIRED_MODEL_FILES,
-    REQUIRED_TOOL_EXECUTABLES,
     RuntimeContext,
 )
 from tsdhn.utils.file_utils import (
@@ -33,84 +34,42 @@ def _create_model_dir(root: Path) -> Path:
     return model_dir
 
 
-def _create_tools_dir(root: Path) -> Path:
-    tools_dir = root / "tools"
-    tools_dir.mkdir()
-    for executable in REQUIRED_TOOL_EXECUTABLES:
-        path = tools_dir / executable
-        path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-        path.chmod(0o755)
-    return tools_dir
-
-
 def test_runtime_context_reports_missing_managed_model(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("TSDHN_MODEL_DIR", raising=False)
-    monkeypatch.delenv("TSDHN_TOOLS_DIR", raising=False)
     monkeypatch.setenv("TSDHN_DATA_HOME", str(tmp_path / "missing"))
 
     with pytest.raises(RuntimeError, match="tsdhn assets install"):
-        RuntimeContext.resolve(require_tools=False)
+        RuntimeContext.resolve()
 
 
-def test_runtime_paths_resolve_explicit_paths(tmp_path: Path) -> None:
+def test_runtime_resolves_an_explicit_model_dir(tmp_path: Path) -> None:
     model_dir = _create_model_dir(tmp_path)
-    tools_dir = _create_tools_dir(tmp_path)
 
-    runtime = RuntimeContext.resolve(model_dir=model_dir, tools_dir=tools_dir)
+    runtime = RuntimeContext.resolve(model_dir=model_dir)
 
     assert runtime.model_dir == model_dir.resolve()
-    assert runtime.tools_dir == tools_dir.resolve()
 
 
-def test_runtime_paths_can_resolve_model_only_when_no_tools_are_needed(
+def test_runtime_resolves_the_model_dir_from_the_environment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     model_dir = _create_model_dir(tmp_path)
-    monkeypatch.delenv("TSDHN_TOOLS_DIR", raising=False)
+    monkeypatch.setenv("TSDHN_MODEL_DIR", str(model_dir))
 
-    runtime = RuntimeContext.resolve(model_dir=model_dir, require_tools=False)
-
-    assert runtime.model_dir == model_dir.resolve()
-    assert runtime.tools_dir is None
+    assert RuntimeContext.resolve().model_dir == model_dir.resolve()
 
 
-def test_runtime_paths_validate_only_required_tools(tmp_path: Path) -> None:
+def test_runtime_reports_external_tool_capabilities(tmp_path: Path) -> None:
+    """Report GMT and ttt_client when they are resolved from PATH."""
     model_dir = _create_model_dir(tmp_path)
-    tools_dir = tmp_path / "tools"
-    tools_dir.mkdir()
-    executable = tools_dir / "fault_plane"
-    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    executable.chmod(0o755)
 
-    runtime = RuntimeContext.resolve(
-        model_dir=model_dir,
-        tools_dir=tools_dir,
-        required_tools=("fault_plane",),
-    )
+    runtime = RuntimeContext.resolve(model_dir=model_dir)
 
-    assert runtime.tools_dir == tools_dir.resolve()
-
-
-def test_runtime_paths_validate_only_required_tools_from_environment(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    model_dir = _create_model_dir(tmp_path)
-    tools_dir = tmp_path / "tools"
-    tools_dir.mkdir()
-    executable = tools_dir / "fault_plane"
-    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    executable.chmod(0o755)
-    monkeypatch.setenv("TSDHN_TOOLS_DIR", str(tools_dir))
-
-    runtime = RuntimeContext.resolve(
-        model_dir=model_dir,
-        required_tools=("fault_plane",),
-    )
-
-    assert runtime.tools_dir == tools_dir.resolve()
+    assert set(runtime.capabilities) == {"gmt", "ttt_client"}
+    assert not hasattr(runtime, "tools_dir")
 
 
 def test_prepare_simulation_workspace_links_only_required_inputs(
@@ -208,6 +167,7 @@ def test_ttt_inverso_uses_shared_meca_spec_for_epicenter(
         encoding="utf-8",
     )
     commands: list[tuple[list[str], Path]] = []
+    module_calls: list[tuple[str, list[str]]] = []
 
     def fake_resolve(executable: str) -> Path:
         return Path("/tools") / executable
@@ -223,8 +183,19 @@ def test_ttt_inverso_uses_shared_meca_spec_for_epicenter(
         commands.append((args, cwd))
         return subprocess.CompletedProcess(args, 0)
 
+    class FakeSession:
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *exc_info: object) -> None:
+            return None
+
+        def call_module(self, module: str, args: list[str]) -> None:
+            module_calls.append((module, args))
+
     monkeypatch.setattr(ttt_inverso, "resolve", fake_resolve)
     monkeypatch.setattr("tsdhn.render.ttt_inverso.subprocess.run", fake_run)
+    monkeypatch.setattr(ttt_inverso, "Session", FakeSession)
 
     ttt_inverso.ttt_inverso_python(working_dir)
 
@@ -239,19 +210,9 @@ def test_ttt_inverso_uses_shared_meca_spec_for_epicenter(
             ],
             working_dir,
         ),
-        (
-            [
-                "/tools/gmt",
-                "grdmath",
-                "ttt.b=bf",
-                "1.0",
-                "MUL",
-                "=",
-                "ttt.b=bf",
-            ],
-            working_dir,
-        ),
     ]
+    grid_arg = f"{working_dir / 'ttt.b'}=bf"
+    assert module_calls == [("grdmath", [grid_arg, "1.0", "MUL", "=", grid_arg])]
 
 
 def test_ttt_inverso_keeps_full_meca_dat_validation(tmp_path: Path) -> None:
@@ -263,25 +224,49 @@ def test_ttt_inverso_keeps_full_meca_dat_validation(tmp_path: Path) -> None:
         ttt_inverso.ttt_inverso_python(working_dir)
 
 
-def test_process_step_uses_prebuilt_executable(tmp_path: Path) -> None:
-    tools_dir = tmp_path / "tools"
+def test_ttt_inverso_surfaces_a_grdmath_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    working_dir = tmp_path / "ttt"
+    working_dir.mkdir()
+    (tmp_path / "meca.dat").write_text(
+        "210.25 -9.50 10 20 30 40 7.5 210 -9 event\n",
+        encoding="utf-8",
+    )
+
+    class BrokenSession:
+        def __enter__(self) -> BrokenSession:
+            return self
+
+        def __exit__(self, *exc_info: object) -> None:
+            return None
+
+        def call_module(self, module: str, args: list[str]) -> None:
+            raise pygmt.exceptions.GMTError("grdmath failed")
+
+    monkeypatch.setattr(ttt_inverso, "resolve", lambda name: Path("/tools") / name)
+    monkeypatch.setattr(
+        "tsdhn.render.ttt_inverso.subprocess.run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args, 0),
+    )
+    monkeypatch.setattr(ttt_inverso, "Session", BrokenSession)
+
+    with pytest.raises(pygmt.exceptions.GMTError, match="grdmath failed"):
+        ttt_inverso.ttt_inverso_python(working_dir)
+
+
+def test_process_step_runs_a_python_step_and_validates_its_outputs(
+    tmp_path: Path,
+) -> None:
     work_dir = tmp_path / "work"
-    tools_dir.mkdir()
     work_dir.mkdir()
 
-    executable = tools_dir / "hello"
-    executable.write_text("#!/bin/sh\necho ok > ran.txt\n", encoding="utf-8")
-    executable.chmod(0o755)
+    def write_result(working_dir: Path) -> None:
+        (working_dir / "ran.txt").write_text("ok\n", encoding="utf-8")
 
     process_step(
-        ProcessingStep(
-            name="hello",
-            outputs=("ran.txt",),
-            runner=ToolRunner("hello"),
-            file_checks=(("ran.txt", "prebuilt executable did not run"),),
-        ),
+        ProcessingStep(name="hello", outputs=("ran.txt",), runner=write_result),
         work_dir,
-        tools_dir,
     )
 
     assert (work_dir / "ran.txt").read_text(encoding="utf-8").strip() == "ok"

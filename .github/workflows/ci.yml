@@ -15,7 +15,6 @@ env:
     UV_VERSION: "0.11.27"
     PYTHON_VERSION: "3.14"
 
-# Least-privilege by default. Each job opts into what it needs.
 permissions: {}
 
 jobs:
@@ -43,6 +42,8 @@ jobs:
         runs-on: ubuntu-latest
         env:
             TSDHN_MODEL_DIR: ${{ github.workspace }}/model
+            # Coverage.py cannot trace Numba's compiled kernels.
+            NUMBA_DISABLE_JIT: "1"
         strategy:
             fail-fast: false
             matrix:
@@ -57,13 +58,10 @@ jobs:
                   enable-cache: true
                   cache-dependency-glob: "uv.lock"
 
-            # libgmt is needed by pygmt (a runtime dep of `tsdhn`).
-            # Install the system lib and create the libgmt.so symlink that
-            # pygmt expects. The symlink step is idempotent.
-            - name: Install GMT (libgmt) for pygmt
+            - name: Install GMT (libgmt) and Ghostscript for pygmt
               run: |
                   sudo apt-get update
-                  sudo apt-get install -y --no-install-recommends gmt libgmt-dev
+                  sudo apt-get install -y --no-install-recommends gmt libgmt-dev ghostscript
                   SO=$(ls /usr/lib/**/libgmt.so.* 2>/dev/null | head -n1)
                   if [ -z "$SO" ]; then
                       echo "::error::libgmt.so.* not found after apt install"
@@ -75,7 +73,10 @@ jobs:
             - run: uv sync --all-packages --group dev
 
             - name: Run tests with coverage
-              run: uv run pytest -n auto --maxfail=1 -q --cov=packages --cov-report= --cov-fail-under=0
+              run: |
+                      uv run pytest -n auto --maxfail=1 -q -m "not integration" \
+                      --cov=packages/tsdhn/tsdhn --cov=packages/api/api \
+                      --cov-report= --cov-fail-under=0
 
             - name: Name coverage data
               if: always()
@@ -94,14 +95,19 @@ jobs:
                   if-no-files-found: ignore
 
     coverage:
-        name: Coverage gate
+        name: Diff coverage gate
         runs-on: ubuntu-latest
-        needs: test
+        needs: [test, api-integration]
         if: always()
         permissions:
             contents: read
         steps:
             - uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+
+            - name: Fetch master for the diff base
+              run: git fetch origin master:refs/remotes/origin/master
 
             - uses: astral-sh/setup-uv@6a191366842ac1502ba6c07e9b5acd5c2d9d8db3 # 8.3.2
               with:
@@ -119,12 +125,21 @@ jobs:
                   pattern: coverage-data-*
                   merge-multiple: true
 
-            - name: Combine coverage and enforce baseline
+            - name: Combine coverage and report the total
               run: |
                   uv run coverage combine
                   uv run coverage html --skip-covered --skip-empty
-                  uv run coverage report --format=markdown --fail-under=0 >> "$GITHUB_STEP_SUMMARY"
+                  uv run coverage xml
+                  uv run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
                   uv run coverage report
+
+            - name: Enforce diff coverage on new/changed lines
+              run: |
+                  uv run diff-cover coverage.xml \
+                      --compare-branch=origin/master \
+                      --markdown-report diff-coverage.md \
+                      --fail-under=80
+                  cat diff-coverage.md >> "$GITHUB_STEP_SUMMARY"
 
             - name: Upload HTML coverage report
               if: failure()
@@ -150,6 +165,103 @@ jobs:
             - run: bun run fmt:check
             - run: bun --filter web check
 
+    web-test:
+        name: Web tests (diff coverage gate)
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  fetch-depth: 0
+
+            - name: Fetch master for the diff base
+              run: git fetch origin master:refs/remotes/origin/master
+
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: "1.3.14"
+
+            - uses: astral-sh/setup-uv@6a191366842ac1502ba6c07e9b5acd5c2d9d8db3 # 8.3.2
+              with:
+                  version: ${{ env.UV_VERSION }}
+                  python-version: ${{ env.PYTHON_VERSION }}
+                  enable-cache: true
+                  cache-dependency-glob: "uv.lock"
+
+            - run: bun install --frozen-lockfile
+            - run: uv sync --group dev --no-install-project
+
+            - run: bun --filter web test:coverage
+
+            - name: Enforce diff coverage on new/changed lines
+              run: |
+                  # lcov paths are relative to apps/web; diff-cover runs at the root.
+                  sed -i 's|^SF:|SF:apps/web/|' apps/web/coverage/lcov.info
+                  uv run diff-cover apps/web/coverage/lcov.info \
+                      --compare-branch=origin/master \
+                      --markdown-report diff-coverage-web.md \
+                      --fail-under=80
+                  cat diff-coverage-web.md >> "$GITHUB_STEP_SUMMARY"
+
+    api-integration:
+        name: Persistence integration
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+        services:
+            postgres:
+                image: postgres:18
+                env:
+                    POSTGRES_USER: tsdhn
+                    POSTGRES_PASSWORD: tsdhn
+                    POSTGRES_DB: tsdhn
+                options: >-
+                    --health-cmd pg_isready
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+                ports:
+                    - 5432:5432
+        steps:
+            - uses: actions/checkout@v7
+
+            - uses: astral-sh/setup-uv@6a191366842ac1502ba6c07e9b5acd5c2d9d8db3 # 8.3.2
+              with:
+                  version: ${{ env.UV_VERSION }}
+                  python-version: ${{ env.PYTHON_VERSION }}
+                  enable-cache: true
+                  cache-dependency-glob: "uv.lock"
+
+            - run: uv sync --all-packages --group dev
+
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: "1.3.14"
+
+            - run: bun install --frozen-lockfile
+
+            - name: Run disposable database integration tests
+              run: bash scripts/integration.sh --coverage
+              env:
+                  COMPUTE_DATABASE_URL: postgresql://tsdhn:tsdhn@localhost:5432/tsdhn
+
+            - name: Name coverage data
+              if: always()
+              run: |
+                  if [ -f .coverage ]; then
+                      mv .coverage .coverage.integration
+                  fi
+
+            - name: Upload coverage data
+              if: always()
+              uses: actions/upload-artifact@v7
+              with:
+                  name: coverage-data-integration
+                  path: .coverage.integration
+                  include-hidden-files: true
+                  if-no-files-found: ignore
+
     contract:
         name: API client contract (no drift)
         runs-on: ubuntu-latest
@@ -165,7 +277,6 @@ jobs:
                   enable-cache: true
                   cache-dependency-glob: "uv.lock"
 
-            # api.main imports pygmt through tsdhn, which needs libgmt at import time.
             - name: Install GMT (libgmt) for pygmt
               run: |
                   sudo apt-get update

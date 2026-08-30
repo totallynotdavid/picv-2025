@@ -2,8 +2,8 @@
 python = "3.14.6"
 uv = "0.11.29"
 bun = "1.3.14"
+postgres = "18.6"
 gitleaks = "8.30.1"
-"libsql-server" = { version = "0.24.32", version_prefix = "libsql-server-v" }
 
 [tasks]
 install = "uv sync --all-packages --group dev --group build"
@@ -16,22 +16,48 @@ lint = [
 
 fix = ["uv run ruff check --fix --unsafe-fixes .", "uv run ruff format ."]
 
-test = "uv run pytest -n auto"
+# The fast suite is service-free. The integration task owns PostgreSQL.
+test = "uv run pytest -n auto -m 'not integration'"
+test-integration = "bash scripts/integration.sh"
+db-migrate = "mise run db:migrate"
 
+# Golden tests need GMT and ttt_client.
+test-golden = "uv run pytest -m golden"
+
+# Parity tests use frozen MATLAB fixtures and optional Fortran tools.
+test-parity = "uv run pytest packages/tsdhn/tests/parity packages/tsdhn-parity/tests"
+
+# Capture MATLAB checkpoints manually. See scripts/capture_matlab_fixtures.py.
+parity-capture-matlab = "uv run python scripts/capture_matlab_fixtures.py"
+
+# Disable Numba JIT so coverage.py can trace the tsunami kernels.
 coverage = [
-  "uv run coverage run -m pytest",
-  "uv run coverage report --fail-under=70",
+  "NUMBA_DISABLE_JIT=1 uv run coverage run -m pytest",
+  "uv run coverage report",
   "uv run coverage json",
+  "uv run coverage xml",
+]
+
+diff-coverage = [
+  "mise run db:start",
+  "mise run coverage",
+  "uv run coverage run --append -m pytest -m integration packages/api/tests",
+  "uv run coverage xml",
+  "uv run diff-cover coverage.xml --compare-branch=origin/master --fail-under=90",
 ]
 
 security = [
   "uv run bandit -r packages -lll --skip B101",
-  # pip-audit --strict does not support editable workspace packages.
-  # Export only external dependencies and run pip-audit in an isolated env.
-  "uv export --locked --no-hashes --all-packages --no-emit-workspace --output-file=requirements.lock.txt",
-  "uvx pip-audit --strict --requirement requirements.lock.txt",
+  "mise run audit",
+  "mise run audit-toolchain",
   "gitleaks detect --source . --no-banner",
 ]
+
+# Audit production dependencies.
+audit = "uv audit --locked --preview-features audit-command --no-dev --no-group build"
+
+# Audit development dependencies.
+audit-toolchain = "uv audit --locked --preview-features audit-command"
 
 build = [
   "uv build --package tsdhn --out-dir dist/tsdhn",
@@ -45,13 +71,20 @@ web-install = "bun install"
 web-dev = "bun --filter web dev"
 web-build = "bun --filter web build"
 web-check = "bun --filter web check"
+web-test = "bun --filter web test"
 lint-js = "bun run lint"
 fmt-js = "bun run fmt"
 fmt-check-js = "bun run fmt:check"
 gen-client = "bun run gen:client"
 
-# Self-hosted libSQL database (sqld). Data persists under ./data/libsql.
-db = "sqld --http-listen-addr 127.0.0.1:8080 --db-path ./data/libsql"
+diff-coverage-js = [
+  "bun --filter web test:coverage",
+  "sed -i.bak 's|^SF:|SF:apps/web/|' apps/web/coverage/lcov.info",
+  "uv run diff-cover apps/web/coverage/lcov.info --compare-branch=origin/master --fail-under=90",
+]
+
+# PostgreSQL is managed by mise. Compose runs the service stack.
+db = "mise run db:start"
 
 dev-up = "podman compose up -d"
 dev-web = "podman compose --profile web up"
@@ -69,6 +102,60 @@ doctor = [
   "gitleaks version",
 ]
 
-# mise ignores missing env files so setup.sh is optional until runtime.
+# setup.sh creates this file when the scientific toolchain is installed.
 [env]
 _.file = ".tsdhn/env"
+
+[tasks."db:init"]
+description = "Initialize the project-local PostgreSQL cluster"
+run = """
+data_dir="$PWD/.data/postgres"
+
+if [ ! -f "$data_dir/PG_VERSION" ]; then
+  mkdir -p "$data_dir"
+  mise x postgres -- initdb -D "$data_dir" -U tsdhn \
+    --auth-host=trust --auth-local=trust --no-instructions
+fi
+"""
+
+[tasks."db:start"]
+description = "Start the project-local PostgreSQL cluster"
+depends = ["db:init"]
+run = """
+data_dir="$PWD/.data/postgres"
+
+if ! mise x postgres -- pg_isready -h 127.0.0.1 -p 5432 -U tsdhn -q; then
+  mise x postgres -- pg_ctl -D "$data_dir" \
+    -l "$data_dir/server.log" \
+    -o "-h 127.0.0.1 -p 5432 -c fsync=off -c synchronous_commit=off -c full_page_writes=off" \
+    -w start
+fi
+
+if ! mise x postgres -- psql -h 127.0.0.1 -p 5432 -U tsdhn -d tsdhn -qAtc "SELECT 1" >/dev/null 2>&1; then
+  mise x postgres -- createdb -h 127.0.0.1 -p 5432 -U tsdhn tsdhn
+fi
+"""
+
+[tasks."db:stop"]
+description = "Stop the project-local PostgreSQL cluster"
+run = """
+data_dir="$PWD/.data/postgres"
+mise x postgres -- pg_ctl -D "$data_dir" stop -m fast -w 2>/dev/null || true
+"""
+
+[tasks."db:reset"]
+description = "Delete the project-local PostgreSQL cluster"
+run = """
+mise run db:stop
+rm -rf "$PWD/.data/postgres"
+"""
+
+[tasks."db:migrate"]
+description = "Apply compute, queue, and web migrations to local PostgreSQL"
+depends = ["db:start"]
+run = [
+  "uv run tsdhn-compute-migrate",
+  "uv run tsdhn-procrastinate-migrate",
+  "DATABASE_URL=\"${COMPUTE_DATABASE_URL:-postgresql://tsdhn:tsdhn@127.0.0.1:5432/tsdhn}\" bun --filter web db:migrate",
+  "uv run tsdhn-web-grants",
+]

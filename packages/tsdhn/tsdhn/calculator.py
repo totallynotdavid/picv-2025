@@ -1,7 +1,10 @@
+"""Source parameters and approximate port arrival times."""
+
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 from scipy.interpolate import RegularGridInterpolator
@@ -25,6 +28,27 @@ logger = logging.getLogger(__name__)
 
 # Legacy corner formulas use 60 nautical miles per degree.
 NM_CONVERSION = 60 * 1853
+
+# Rigidity (N/m^2). Matches model/fault_plane.f90.
+RIGIDITY_N_PER_M2 = 4.0e10
+
+
+def rupture_dimensions(Mw: float) -> tuple[float, float]:
+    """Return Papazachos et al. (2004) rupture length and width in km."""
+    L = 10 ** (0.55 * Mw - 2.19)
+    W = 10 ** (0.31 * Mw - 0.63)
+    return L, W
+
+
+def average_slip(Mw: float, L: float, W: float) -> tuple[float, float]:
+    """Hanks and Kanamori moment magnitude relation, solved for slip.
+
+    L, W in km. Returns (M0, D): seismic moment (N*m), average dislocation
+    (m).
+    """
+    M0 = 10 ** (1.5 * Mw + 9.1)
+    D = M0 / (RIGIDITY_N_PER_M2 * (L * 1000) * (W * 1000))
+    return M0, D
 
 
 @dataclass(frozen=True)
@@ -55,12 +79,83 @@ def parse_port_line(line: str) -> Port | None:
     return Port(name=name, lon=lon, lat=lat)
 
 
+def calculate_rectangle_parameters(
+    L: float,
+    W: float,
+    lon0: float,
+    lat0: float,
+    azimuth: float,
+    dip: float,
+    on_checkpoint: Callable[[str, Any], None] | None = None,
+) -> tuple[dict[str, float], list[dict[str, float]]]:
+    """Return the MATLAB-compatible fault-plane parameters and corners.
+
+    The optional `on_checkpoint` callback receives each named intermediate in
+    calculation order.
+    """
+
+    def checkpoint(name: str, value: Any) -> None:
+        if on_checkpoint is not None:
+            on_checkpoint(name, value)
+
+    L1 = L * 1000
+    checkpoint("L1", L1)
+    W1 = W * 1000 * np.cos(np.deg2rad(dip))
+    checkpoint("W1", W1)
+    beta = np.degrees(np.arctan(W1 / L1))
+    checkpoint("beta", beta)
+    alfa = azimuth - 270
+    checkpoint("alfa", alfa)
+    h1 = np.hypot(L1, W1)
+    checkpoint("h1", h1)
+
+    # Keep the names used by the legacy report files.
+    params = {
+        "L1": L1,
+        "W1": W1,
+        "beta": beta,
+        "alfa": alfa,
+        "h1": h1,
+        "a1": 0.5 * h1 * np.sin(np.deg2rad(alfa + beta)) / 1000,
+        "b1": 0.5 * h1 * np.cos(np.deg2rad(alfa + beta)) / 1000,
+        # Use the longitude frame expected by the legacy grid.
+        "xo": lon0 + (0.5 * h1 * np.cos(np.deg2rad(alfa + beta)) / 1000) / 111.0,
+        "yo": lat0 - (0.5 * h1 * np.sin(np.deg2rad(alfa + beta)) / 1000) / 111.0,
+    }
+    checkpoint("a1", params["a1"])
+    checkpoint("b1", params["b1"])
+    checkpoint("xo", params["xo"])
+    checkpoint("yo", params["yo"])
+
+    # Legacy geometry expresses fault-plane offsets in degree-space nautical miles.
+    angles = -np.radians([(azimuth - 90), azimuth])
+
+    r = np.array([L1, W1]) / NM_CONVERSION
+
+    sx = (
+        r[0] * np.cos(angles[0]) * np.array([0, 1, 1, 0, 0])
+        + r[1] * np.cos(angles[1]) * np.array([0, 0, 1, 1, 0])
+    ) + params["xo"]
+
+    sy = (
+        r[0] * np.sin(angles[0]) * np.array([0, 1, 1, 0, 0])
+        + r[1] * np.sin(angles[1]) * np.array([0, 0, 1, 1, 0])
+    ) + params["yo"]
+
+    corners = [{"lon": x, "lat": y} for x, y in zip(sx, sy, strict=False)]
+    checkpoint(
+        "corners", np.array([[corner["lon"], corner["lat"]] for corner in corners])
+    )
+
+    return params, corners
+
+
 class TsunamiCalculator:
     def __init__(self, model_dir: Path | None = None) -> None:
         self.model_dir = (
             validate_model_dir(model_dir.resolve())
             if model_dir is not None
-            else RuntimeContext.resolve(require_tools=False).model_dir
+            else RuntimeContext.resolve().model_dir
         )
         self.xa: np.ndarray
         self.ya: np.ndarray
@@ -86,7 +181,7 @@ class TsunamiCalculator:
             self.ya = pacifico["ya"].flatten()
             self.bathymetry = pacifico["A"]
 
-            # Bathymetry uses 0..360 longitudes. Calculations use -180..180.
+            # Model bathymetry uses 0..360 longitudes; inputs use -180..180.
             self.vlon = self.xa - 360
             self.vlat = self.ya
             if self.vlat[0] > self.vlat[-1]:
@@ -111,7 +206,7 @@ class TsunamiCalculator:
             mech_path = self.model_dir / "mecfoc.dat"
             self.mechanism_data = np.loadtxt(mech_path)
 
-            # CMT data uses eastern positive degrees. Lookup uses western negatives.
+            # CMT data uses eastern-positive longitudes; lookup uses western negatives.
             self.mechanism_data[:, 0] = np.where(
                 self.mechanism_data[:, 0] > 0,
                 self.mechanism_data[:, 0] - 360,
@@ -130,21 +225,12 @@ class TsunamiCalculator:
     ) -> CalculationResponse:
         """Calculate source parameters and write hypo.dat for the simulation."""
         try:
-            # Papazachos et al. (2004) magnitude scaling relations.
-            L = 10 ** (0.55 * data.Mw - 2.19)  # Rupture length (km)
-            W = 10 ** (0.31 * data.Mw - 0.63)  # Rupture width (km)
-
-            # Hanks and Kanamori moment magnitude relation.
-            M0 = 10 ** (1.5 * data.Mw + 9.1)  # Seismic moment (N*m)
-
-            # Seismic moment definition solved for average slip.
-            u = 4.5e10  # Rigidity (N/m^2)
-            D = M0 / (u * (L * 1000) * (W * 1000))  # Dislocation (m)
+            L, W = rupture_dimensions(data.Mw)  # km
+            M0, D = average_slip(data.Mw, L, W)  # N*m, m
 
             azimuth, dip = self._get_focal_mechanism(data.lon0, data.lat0)
 
-            # Fault plane geometry
-            rect_params, rect_corners = self._calculate_rectangle_parameters(
+            rect_params, rect_corners = calculate_rectangle_parameters(
                 L, W, data.lon0, data.lat0, azimuth, dip
             )
 
@@ -158,10 +244,8 @@ class TsunamiCalculator:
             if self.bathy_interpolator is None:
                 raise RuntimeError("Bathymetry interpolator not loaded")
 
-            # Get bathymetry at epicenter
             h0 = self.bathy_interpolator((data.lat0, data.lon0))
 
-            # Determine location and warning
             location = determine_epicenter_location(h0, distance_to_coast)
             warning = determine_tsunami_warning(data.Mw, data.h, h0, distance_to_coast)
 
@@ -247,50 +331,10 @@ class TsunamiCalculator:
             + (self.mechanism_data[:, 1] - lat0) ** 2
         )
         closest_idx = np.argmin(distances)
-        # The MATLAB model fixes dip at 18 degrees after selecting strike.
-        return self.mechanism_data[closest_idx, 2], 18.0
-
-    def _calculate_rectangle_parameters(
-        self, L: float, W: float, lon0: float, lat0: float, azimuth: float, dip: float
-    ) -> tuple[dict[str, float], list[dict[str, float]]]:
-        """Return the MATLAB-compatible fault-plane parameters and corners."""
-        L1 = L * 1000  # Meters.
-        W1 = W * 1000 * np.cos(np.deg2rad(dip))
-        beta = np.degrees(np.arctan(W1 / L1))
-        alfa = azimuth - 270
-        h1 = np.hypot(L1, W1)
-
-        # Report keys preserve the legacy MATLAB parameter names.
-        params = {
-            "L1": L1,
-            "W1": W1,
-            "beta": beta,
-            "alfa": alfa,
-            "h1": h1,
-            "a1": 0.5 * h1 * np.sin(np.deg2rad(alfa + beta)) / 1000,  # in km
-            "b1": 0.5 * h1 * np.cos(np.deg2rad(alfa + beta)) / 1000,  # in km
-            "xo": lon0 + (0.5 * h1 * np.cos(np.deg2rad(alfa + beta)) / 1000) / 110,
-            "yo": lat0 - (0.5 * h1 * np.sin(np.deg2rad(alfa + beta)) / 1000) / 110,
-        }
-
-        # Legacy geometry expresses fault-plane offsets in degree-space nautical miles.
-        angles = -np.radians([(azimuth - 90), azimuth])
-
-        r = np.array([L1, W1]) / NM_CONVERSION
-
-        sx = (
-            r[0] * np.cos(angles[0]) * np.array([0, 1, 1, 0, 0])
-            + r[1] * np.cos(angles[1]) * np.array([0, 0, 1, 1, 0])
-        ) + params["xo"]
-
-        sy = (
-            r[0] * np.sin(angles[0]) * np.array([0, 1, 1, 0, 0])
-            + r[1] * np.sin(angles[1]) * np.array([0, 0, 1, 1, 0])
-        ) + params["yo"]
-
-        corners = [{"lon": x, "lat": y} for x, y in zip(sx, sy, strict=False)]
-
-        return params, corners
+        return (
+            self.mechanism_data[closest_idx, 2],
+            self.mechanism_data[closest_idx, 3],
+        )
 
     def _calculate_travel_time(
         self, lon0: float, lat0: float, port_lon: float, port_lat: float, time0: float
@@ -300,7 +344,6 @@ class TsunamiCalculator:
         t2 = np.pi / 2 - np.radians(port_lat)
         f2 = np.radians(port_lon)
 
-        # Spherical law of cosines.
         cos_alpha = np.sin(t1) * np.sin(t2) * np.cos(f1 - f2) + np.cos(t1) * np.cos(t2)
         alpha = np.arccos(np.clip(cos_alpha, -1, 1))
         distance = TSUNAMI_MODEL_EARTH_RADIUS_KM * alpha
@@ -317,7 +360,7 @@ class TsunamiCalculator:
 
             indices = np.arange(n_points + 1)[:, None]
 
-            # Bathymetry interpolation expects (lat, lon), not path (lon, lat).
+            # The interpolator takes (lat, lon), while path points are (lon, lat).
             path_points = np.array([lon0, lat0]) + indices * delta * vu
             bath_points = path_points[:, [1, 0]]
 
@@ -327,7 +370,6 @@ class TsunamiCalculator:
             h = np.abs(self.bathy_interpolator(bath_points))
             v = np.sqrt(STANDARD_GRAVITY_M_PER_S2 * h) * 3.6  # Velocity in km/h
 
-            # Simpson's rule integration.
             delta_dist = (alpha / n_points) * TSUNAMI_MODEL_EARTH_RADIUS_KM
             y = 1 / v
             integral = (
@@ -338,7 +380,7 @@ class TsunamiCalculator:
 
             travel_time = 0.5 * integral
 
-            # Empirical corrections match the legacy arrival-time calibration.
+            # These inherited calibration rules have no source in the repository.
             if travel_time > 3.0:
                 travel_time = distance / 733 + 0.25
             elif 1.4 < travel_time < 3.0:

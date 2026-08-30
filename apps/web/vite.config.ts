@@ -12,7 +12,7 @@ export default defineConfig({
     tailwindcss(),
     sveltekit({
       compilerOptions: {
-        // Project components use runes while dependencies keep their own Svelte mode.
+        // Enable runes for project files, not for dependencies.
         runes: ({ filename }) =>
           filename.split(/[/\\]/).includes("node_modules") ? undefined : true,
       },

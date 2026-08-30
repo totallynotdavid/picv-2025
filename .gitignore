@@ -13,10 +13,13 @@ node_modules/
 # coverage reports
 .coverage
 .coverage.*
+coverage
+coverage.xml
 coverage.json
 htmlcov/
 
 # runtime outputs
+.data
 data
 /jobs/
 hypo.dat

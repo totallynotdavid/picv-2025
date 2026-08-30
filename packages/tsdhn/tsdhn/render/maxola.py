@@ -76,13 +76,12 @@ def create_cpt_files(work_dir: Path) -> tuple[Path, Path]:
     hgt_cpt = work_dir / "hgt.cpt"
 
     try:
-        # GMT writes CPT files through a temporary path, then the pipeline owns them.
         with GMTTempFile() as temp_cpt:
             pygmt.makecpt(cmap="globe", output=temp_cpt.name)
             shutil.move(temp_cpt.name, depth_cpt)
 
         with GMTTempFile() as temp_cpt:
-            # The polar CPT preserves the legacy blue-to-red wave-height convention.
+            # Preserve the legacy blue-to-red wave-height scale.
             pygmt.makecpt(
                 cmap="polar",
                 series="-0.5/0.5/0.01",
@@ -91,7 +90,6 @@ def create_cpt_files(work_dir: Path) -> tuple[Path, Path]:
             )
             shutil.move(temp_cpt.name, hgt_cpt)
 
-            # GMT uses B, F, and N rows for below-range, above-range, and NaN colors.
             with open(hgt_cpt, "a") as f:
                 f.write("B 0 0 255\nF 255 0 0\nN 255 255 255\n")
 
@@ -135,6 +133,7 @@ def reshape_model_grid(values: np.ndarray, grid_config: GridConfig) -> np.ndarra
 
 
 def normalize_max_height_grid(max_height_grid: np.ndarray) -> np.ndarray:
+    """Rescale solver values for display with a 12 m maximum."""
     finite_values = max_height_grid[np.isfinite(max_height_grid)]
     if finite_values.size == 0:
         return np.zeros_like(max_height_grid, dtype=np.float32)
@@ -282,7 +281,7 @@ def generate_maxola_plot(work_dir: Path) -> None:
         fig = pygmt.Figure()
         fig.shift_origin(xshift="4.2c", yshift="10.0c")
 
-        # Azimuthal projection centered on the Pacific basin.
+        # Center the projection on the Pacific basin.
         fig.grdimage(
             grid=max_height_grid,
             cmap=hgt_cpt,

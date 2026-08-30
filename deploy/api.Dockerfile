@@ -1,8 +1,5 @@
-# FastAPI and the Procrastinate worker run in this image for the self-hosted backend.
-#
-# Builds on the TSDHN toolchain base, which provides the scientific runtime:
-# GMT, Intel Fortran, and ttt_client. The base ships Python 3.12 for
-# system tooling; the app uses uv-managed Python 3.14.
+# Compute API and worker image.
+# The toolchain base provides GMT, Intel Fortran, and ttt_client.
 #
 # Build context is the repo root:  docker build -f deploy/api.Dockerfile .
 ARG TOOLCHAIN_IMAGE=ghcr.io/totallynotdavid/tsdhn-toolchain:master
@@ -18,35 +15,37 @@ COPY --from=ghcr.io/astral-sh/uv:0.11.27 /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
-# Dependencies are installed before source changes invalidate the build cache.
+# Install dependencies before copying the remaining source.
 COPY pyproject.toml uv.lock ./
 COPY packages ./packages
 RUN uv python install 3.14 \
  && uv sync --frozen --no-dev --package tsdhn-api
 
 # TSDHN_MODEL_DIR points at this copied model tree at runtime.
+# The pipeline uses Python plus GMT and ttt_client. The compiled Fortran
+# binaries are used by parity tests, not by normal simulation runs.
 COPY model ./model
-RUN mkdir -p /app/tools \
- && ifx -parallel /app/model/fault_plane.f90 -o /app/tools/fault_plane \
- && ifx -parallel /app/model/def_oka.f -o /app/tools/deform \
- && ifx -parallel -qopenmp /app/model/tsunami1.for -o /app/tools/tsunami \
- && command -v gmt \
+RUN command -v gmt \
  && command -v gs \
- && command -v ttt_client \
- && test -x /app/tools/fault_plane \
- && test -x /app/tools/deform \
- && test -x /app/tools/tsunami
+ && command -v ttt_client
+
+# Ghostscript is restricted to its allowed paths in the container. Keep its
+# session files and simulation workspaces under /var/tmp.
+RUN mkdir -p /var/tmp/jobs \
+ && chown -R appuser:appuser /app /var/tmp/jobs
 
 ENV APP_HOST=0.0.0.0 \
     APP_PORT=8000 \
-    COMPUTE_DATABASE_URL=postgresql://tsdhn:tsdhn@postgres:5432/tsdhn_compute \
+    COMPUTE_DATABASE_URL=postgresql://tsdhn:tsdhn@postgres:5432/tsdhn \
     MINIO_ENDPOINT=minio:9000 \
     MINIO_ACCESS_KEY=minioadmin \
     MINIO_SECRET_KEY=minioadmin \
     MINIO_BUCKET=tsdhn-results \
     TSDHN_MODEL_DIR=/app/model \
-    TSDHN_TOOLS_DIR=/app/tools \
-    TSDHN_JOBS_DIR=/app/jobs
+    TSDHN_JOBS_DIR=/var/tmp/jobs \
+    HOME=/var/tmp
+
+USER appuser
 
 EXPOSE 8000
 CMD ["uv", "run", "--no-dev", "tsdhn-api"]

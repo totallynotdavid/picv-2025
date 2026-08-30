@@ -232,8 +232,9 @@ jobs:
         env:
             API_IMAGE: ghcr.io/${{ github.repository_owner }}/tsdhn-api:candidate-${{ github.run_id }}-${{ github.run_attempt }}
             TOOLCHAIN_IMAGE: ghcr.io/${{ github.repository_owner }}/tsdhn-toolchain:candidate-${{ github.run_id }}-${{ github.run_attempt }}
-            APP_JOB_ID: 4cfe522f-7e7d-46e0-96ca-7b98743fb9f5
-            BACKEND_SERVICE_TOKEN: compose-e2e-token
+            SIMULATION_ID: 4cfe522f-7e7d-46e0-96ca-7b98743fb9f5
+            COMPUTE_API_TOKEN: compose-e2e-token
+            APP_DB_PASSWORD: compose-e2e-app-db-password
             BETTER_AUTH_SECRET: compose-e2e-better-auth-secret
             ORIGIN: http://localhost:3000
             MINIO_ACCESS_KEY: minioadmin
@@ -260,11 +261,11 @@ jobs:
             - name: Validate compose config
               run: docker compose config --quiet
 
-            - name: Start backend stack from candidate images
+            - name: Start compute stack from candidate images
               run: docker compose up -d --no-build postgres minio compute-migrate api worker
 
-            - name: Run backend smoke test
-              run: bash scripts/e2e/backend_stack_smoke.sh
+            - name: Run compute smoke test
+              run: bash scripts/e2e/compute_stack_smoke.sh
 
             - name: Capture compose diagnostics
               if: always()

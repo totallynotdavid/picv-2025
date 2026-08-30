@@ -1,0 +1,83 @@
+name: Crash-recovery e2e
+
+# Run the crash-recovery scenarios against the real Compose stack.
+on:
+    workflow_dispatch:
+
+concurrency:
+    group: crash-recovery-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+    crash-recovery:
+        name: Crash-recovery e2e (real toolchain)
+        runs-on: ubuntu-latest
+        timeout-minutes: 90
+        permissions:
+            contents: read
+        env:
+            COMPUTE_API_TOKEN: compose-e2e-token
+            APP_DB_PASSWORD: compose-e2e-app-db-password
+            BETTER_AUTH_SECRET: compose-e2e-better-auth-secret
+            ORIGIN: http://localhost:3000
+            MINIO_ACCESS_KEY: minioadmin
+            MINIO_SECRET_KEY: minioadmin
+            MINIO_BUCKET: tsdhn-results
+        steps:
+            - uses: actions/checkout@v7
+
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+            - name: Build toolchain image (cached)
+              uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+              with:
+                  context: .
+                  file: deploy/toolchain.Dockerfile
+                  tags: localhost/tsdhn-toolchain:crash-recovery-ci
+                  load: true
+                  cache-from: type=gha,scope=toolchain
+                  cache-to: type=gha,mode=max,scope=toolchain
+
+            - name: Build api image (cached)
+              uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+              with:
+                  context: .
+                  file: deploy/api.Dockerfile
+                  build-args: TOOLCHAIN_IMAGE=localhost/tsdhn-toolchain:crash-recovery-ci
+                  tags: localhost/tsdhn-api:crash-recovery-ci
+                  load: true
+                  cache-from: type=gha,scope=api
+                  cache-to: type=gha,mode=max,scope=api
+
+            - name: Start compute stack
+              env:
+                  API_IMAGE: localhost/tsdhn-api:crash-recovery-ci
+              run: docker compose up -d --no-build postgres minio compute-migrate api worker
+
+            - name: Run crash-recovery e2e scenarios
+              env:
+                  API_IMAGE: localhost/tsdhn-api:crash-recovery-ci
+              run: bash scripts/e2e/crash_recovery_e2e.sh
+
+            - name: Capture compose diagnostics
+              if: always()
+              run: |
+                  mkdir -p e2e-artifacts
+                  docker compose ps -a > e2e-artifacts/compose-ps.txt || true
+                  docker compose logs --no-color > e2e-artifacts/compose.log || true
+                  cp -f ./*.json e2e-artifacts/ 2>/dev/null || true
+
+            - name: Upload diagnostics
+              if: always()
+              uses: actions/upload-artifact@v7
+              with:
+                  name: crash-recovery-diagnostics
+                  path: e2e-artifacts
+                  if-no-files-found: ignore
+
+            - name: Stop stack
+              if: always()
+              run: docker compose down -v --remove-orphans

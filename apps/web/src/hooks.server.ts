@@ -1,9 +1,15 @@
 import type { Handle } from "@sveltejs/kit";
 import { building } from "$app/environment";
 import { auth } from "$lib/server/auth";
+import { db } from "$lib/server/db";
+import { createSimulationRepository } from "$lib/server/simulation-repository";
 import { svelteKitHandler } from "better-auth/svelte-kit";
 
+const simulationRepository = createSimulationRepository(db);
+
 const handleBetterAuth: Handle = async ({ event, resolve }) => {
+  event.locals.simulationRepository = simulationRepository;
+
   const session = await auth.api.getSession({ headers: event.request.headers });
 
   if (session) {

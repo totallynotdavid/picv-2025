@@ -1,18 +1,18 @@
 import { error } from "@sveltejs/kit";
 
-import { backendRaw } from "$lib/server/api";
-import { getSimulation } from "$lib/server/simulations";
+import { computeRequestConfig } from "$lib/server/compute-api";
 
 import type { RequestHandler } from "./$types";
 
-/** Proxy backend progress only after the simulation owner is verified. */
 export const GET: RequestHandler = async ({ params, locals, fetch }) => {
   if (!locals.user) error(401);
-  const sim = await getSimulation(locals.user.id, params.id);
+  const sim = await locals.simulationRepository.getSimulation(locals.user.id, params.id);
   if (!sim) error(404);
-  if (!sim.computeJobId) error(409, "La simulación aún no fue aceptada por el backend.");
+  if (sim.status === "submitting" || sim.status === "submission_failed") {
+    error(409, "La simulación aún no fue aceptada por el servicio de cálculo.");
+  }
 
-  const { url, headers } = backendRaw();
+  const { url, headers } = computeRequestConfig();
   const upstream = await fetch(`${url}/api/v1/jobs/${encodeURIComponent(sim.id)}/events`, {
     headers,
   });

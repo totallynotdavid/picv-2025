@@ -5,9 +5,9 @@ from tsdhn.domain import (
     TsunamiTravelResponse,
 )
 from tsdhn.engine import (
-    Artifact,
-    ArtifactBundle,
+    OutputFile,
     SimulationEngine,
+    SimulationOutputs,
     SimulationRequest,
     SimulationResult,
     run_simulation,
@@ -15,13 +15,13 @@ from tsdhn.engine import (
 from tsdhn.runtime import RuntimeContext
 
 __all__ = [
-    "Artifact",
-    "ArtifactBundle",
     "CalculationResponse",
     "EarthquakeInput",
     "JobStatus",
+    "OutputFile",
     "RuntimeContext",
     "SimulationEngine",
+    "SimulationOutputs",
     "SimulationRequest",
     "SimulationResult",
     "TsunamiTravelResponse",

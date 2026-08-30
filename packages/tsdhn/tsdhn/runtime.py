@@ -8,12 +8,12 @@ from pathlib import Path
 __all__ = [
     "REQUIRED_MODEL_DIRS",
     "REQUIRED_MODEL_FILES",
-    "REQUIRED_TOOL_EXECUTABLES",
+    "SYSTEM_EXECUTABLES",
     "CapabilityStatus",
     "RuntimeContext",
-    "tools_dir_from_env",
+    "check_capabilities",
+    "resolve_model_dir",
     "validate_model_dir",
-    "validate_tools_dir",
 ]
 
 REQUIRED_MODEL_DIRS: tuple[str, ...] = ("bathy", "ttt_mundo")
@@ -28,7 +28,9 @@ REQUIRED_MODEL_FILES: tuple[str, ...] = (
     "bathy/ya.dat",
     "ttt_mundo/cortado.i2",
 )
-REQUIRED_TOOL_EXECUTABLES: tuple[str, ...] = ("fault_plane", "deform", "tsunami")
+
+# Report steps resolve these tools from PATH.
+SYSTEM_EXECUTABLES: tuple[str, ...] = ("gmt", "ttt_client")
 
 
 @dataclass(frozen=True)
@@ -43,7 +45,6 @@ class CapabilityStatus:
 @dataclass(frozen=True)
 class RuntimeContext:
     model_dir: Path
-    tools_dir: Path | None
     model_version: str
     capabilities: dict[str, CapabilityStatus]
 
@@ -51,31 +52,17 @@ class RuntimeContext:
     def resolve(
         cls,
         model_dir: Path | None = None,
-        tools_dir: Path | None = None,
         *,
-        require_tools: bool = True,
-        required_tools: tuple[str, ...] | None = None,
         model_version: str | None = None,
     ) -> RuntimeContext:
         resolved_model_dir, resolved_model_version = resolve_model_dir(
             model_dir=model_dir,
             model_version=model_version,
         )
-        resolved_tools_dir = None
-        if require_tools:
-            tools_path = (
-                tools_dir.resolve() if tools_dir is not None else _tools_dir_env_path()
-            )
-            resolved_tools_dir = validate_tools_dir(
-                tools_path,
-                required_tools=required_tools,
-            )
-        capabilities = check_capabilities(required_tools=required_tools or ())
         return cls(
             model_dir=resolved_model_dir,
-            tools_dir=resolved_tools_dir,
             model_version=resolved_model_version,
-            capabilities=capabilities,
+            capabilities=check_capabilities(),
         )
 
 
@@ -102,19 +89,6 @@ def resolve_model_dir(
     )
 
 
-def tools_dir_from_env() -> Path:
-    return validate_tools_dir(_tools_dir_env_path())
-
-
-def _tools_dir_env_path() -> Path:
-    value = os.environ.get("TSDHN_TOOLS_DIR")
-    if not value:
-        raise RuntimeError(
-            "TSDHN_TOOLS_DIR must be set to the prebuilt model executable directory."
-        )
-    return Path(value).resolve()
-
-
 def validate_model_dir(path: Path) -> Path:
     missing_dirs = [
         dirname for dirname in REQUIRED_MODEL_DIRS if not (path / dirname).is_dir()
@@ -130,26 +104,11 @@ def validate_model_dir(path: Path) -> Path:
     return path
 
 
-def validate_tools_dir(
-    path: Path, *, required_tools: tuple[str, ...] | None = None
-) -> Path:
-    required = required_tools or REQUIRED_TOOL_EXECUTABLES
-    missing = [
-        executable for executable in required if not (path / executable).is_file()
-    ]
-    if missing:
-        raise RuntimeError(
-            f"Invalid TSDHN tools directory '{path}'. Missing: {', '.join(missing)}"
-        )
-    return path
-
-
 def check_capabilities(
     *,
-    required_tools: tuple[str, ...] = (),
+    executables: tuple[str, ...] = SYSTEM_EXECUTABLES,
 ) -> dict[str, CapabilityStatus]:
-    names = tuple(dict.fromkeys((*required_tools, "gmt", "ttt_client")))
-    return {name: _check_executable(name) for name in names}
+    return {name: _check_executable(name) for name in executables}
 
 
 def _check_executable(name: str) -> CapabilityStatus:

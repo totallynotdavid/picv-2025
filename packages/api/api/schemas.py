@@ -10,6 +10,8 @@ __all__ = [
     "JobCreated",
     "JobRequest",
     "JobStatusResponse",
+    "OutputList",
+    "StoredOutput",
     "VersionInfo",
 ]
 
@@ -22,21 +24,17 @@ class CalculationPreview(BaseModel):
 
 
 class JobRequest(BaseModel):
-    app_job_id: UUID
+    simulation_id: UUID
     input: EarthquakeInput
 
 
 class JobCreated(BaseModel):
-    app_job_id: str
-    compute_job_id: str
+    simulation_id: str
     status: str
-    result_bucket: str | None = None
-    result_key: str | None = None
 
 
 class JobStatusResponse(BaseModel):
-    app_job_id: str
-    compute_job_id: str
+    simulation_id: str
     status: str
     details: str | None = None
     step: str | None = None
@@ -44,13 +42,23 @@ class JobStatusResponse(BaseModel):
     total_steps: int | None = None
     calculation: CalculationResponse | None = None
     travel_times: TsunamiTravelResponse | None = None
-    result_bucket: str | None = None
-    result_key: str | None = None
     error: str | None = None
     created_at: str | None = None
     started_at: str | None = None
     finished_at: str | None = None
-    artifacts_available: bool = False
+    # Output names are public. Storage keys remain inside the compute service.
+    outputs: list[str] = []
+
+
+class StoredOutput(BaseModel):
+    name: str
+    filename: str
+    content_type: str
+
+
+class OutputList(BaseModel):
+    simulation_id: str
+    outputs: list[StoredOutput]
 
 
 class HealthStatus(BaseModel):

@@ -1,19 +1,14 @@
 # TSDHN web
 
-`apps/web` is the SvelteKit application for authenticated simulation requests,
-calculation previews, progress display, and artifact status.
+`apps/web` is the SvelteKit web app. It provides authentication, simulation
+history, the input form, progress pages, and output downloads.
 
-The app uses a server-side web backend pattern:
+The browser talks to SvelteKit. Server code calls the FastAPI compute service
+at `COMPUTE_API_URL` with `COMPUTE_API_TOKEN`. See
+[`ARCHITECTURE.md`](../../ARCHITECTURE.md) for how the parts share data and
+derive the state shown to researchers.
 
-- Browser requests go to SvelteKit routes.
-- SvelteKit server code calls FastAPI with `BACKEND_SERVICE_TOKEN`.
-- The service token stays in server-side code.
-- SQLite/libSQL stores data managed by the web app, such as users and submitted simulation
-  records.
-- FastAPI manages live simulation progress, worker state, and MinIO artifact
-  pointers.
-
-## Commands
+## Development
 
 From the repository root:
 
@@ -22,70 +17,60 @@ bun install
 bun --filter web dev
 bun --filter web check
 bun --filter web build
+bun --filter web test
 ```
 
-The root package also exposes:
+`bun --filter web test` is the fast Vitest suite. It does not need PostgreSQL,
+the compute service, or MinIO. It tests route decisions and server behavior
+without a database. PostgreSQL queries are tested by:
 
 ```sh
-mise run web-dev
-mise run web-check
-mise run web-build
+mise run test-integration
 ```
 
-## Environment
-
-Create `apps/web/.env` from [`apps/web/.env.example`](./.env.example).
-
-| Variable                | Example from `.env.example` | Purpose                                         |
-| ----------------------- | --------------------------- | ----------------------------------------------- |
-| `DATABASE_URL`          | `file:local.db`             | Drizzle/libSQL connection string                |
-| `ORIGIN`                | `http://localhost:5173`     | Public origin used by SvelteKit and Better Auth |
-| `BETTER_AUTH_SECRET`    | empty                       | Better Auth session secret                      |
-| `BACKEND_URL`           | `http://localhost:8000`     | FastAPI backend base URL                        |
-| `BACKEND_SERVICE_TOKEN` | empty                       | Bearer token sent only by SvelteKit server code |
-
-`BETTER_AUTH_SECRET` and `BACKEND_SERVICE_TOKEN` must be non-empty outside
-local-only development.
+That task starts PostgreSQL, creates a temporary database, and runs the web
+integration tests. It does not use the normal development database.
 
 ## Database
 
-The app uses Drizzle with SQLite/libSQL. The schema lives in
-[`src/lib/server/db/schema.ts`](./src/lib/server/db/schema.ts), and Better Auth
-tables are generated into [`src/lib/server/db/auth.schema.ts`](./src/lib/server/db/auth.schema.ts).
-
-```sh
-bun --filter web db:generate
-bun --filter web db:migrate
-bun --filter web db:push
-bun --filter web db:studio
-```
-
-Regenerate the Better Auth schema with:
+Web tables are declared in `src/lib/server/db/schema.ts`. Better Auth tables
+are generated into `src/lib/server/db/auth.schema.ts`:
 
 ```sh
 bun --filter web auth:schema
 ```
 
-## Backend integration
+`src/lib/server/db/compute.ts` describes the columns read from `compute.jobs`.
+It exists so Drizzle can join current compute state to a simulation. It is not
+part of the web migration schema.
 
-Typed backend calls use `@tsdhn/api-client` from
-[`libs/api-client`](../../libs/api-client/readme.md). The wrapper in
-[`src/lib/server/api.ts`](./src/lib/server/api.ts) attaches the bearer token and
-uses SvelteKit's request-aware `fetch` for server-side calls.
-
-Current server-side backend calls include:
-
-- `POST /api/v1/calculations` from [`src/routes/api/calculations/+server.ts`](./src/routes/api/calculations/+server.ts)
-- `POST /api/v1/jobs` from [`src/lib/server/dispatch.ts`](./src/lib/server/dispatch.ts)
-- `GET /api/v1/jobs/{id}` from app-owned simulation pages and dashboard status sync
-- `GET /api/v1/jobs/{id}/events` proxied by [`src/routes/(app)/simulations/[id]/events/+server.ts`](./src/routes/%28app%29/simulations/%5Bid%5D/events/+server.ts)
-
-## Docker
-
-The root Compose file can run the web app with the backend stack:
+Run web migrations with a database administrator connection:
 
 ```sh
-docker compose --profile web up
+bun --filter web db:generate
+bun --filter web db:migrate
 ```
 
-The web image is built from [`deploy/web.Dockerfile`](../../deploy/web.Dockerfile).
+The running app uses the restricted role created by the compute migration. See
+[`DEPLOY.md`](../../DEPLOY.md) for the complete startup order and environment.
+
+## Server modules
+
+- `src/lib/server/compute-api.ts` builds the typed compute API client from
+  `COMPUTE_API_URL` and `COMPUTE_API_TOKEN`. Both values stay on the server.
+- `src/lib/server/submit-simulation.ts` submits a simulation. It records an
+  error if the compute service rejects the request and clears that error after
+  a successful retry.
+- `src/lib/server/simulation-repository.ts` contains simulation queries and
+  accepts the database connection to use.
+- `src/hooks.server.ts` creates the production repository and puts it in
+  `event.locals`.
+- `src/lib/server/simulation-details.ts` joins the simulation record with its
+  current compute status for pages.
+- `src/lib/server/outputs.ts` checks requested output names against the files
+  available for the simulation.
+- The progress and output route handlers check the session and simulation
+  ownership before calling the compute API.
+
+For local schema work, `db:push` and `db:studio` are available. Use migrations
+for a deployed database.

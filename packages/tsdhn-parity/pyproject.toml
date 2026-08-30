@@ -1,0 +1,23 @@
+[project]
+name = "tsdhn-parity"
+version = "0.0.1"
+description = "Checkpoint-trace parity testing between legacy MATLAB/Fortran units and their tsdhn Python ports"
+requires-python = ">=3.14"
+readme = "readme.md"
+license = { text = "MIT" }
+authors = [
+    { name = "David Duran", email = "dadch1404@gmail.com" },
+]
+dependencies = [
+    "tsdhn",
+    "numpy==2.4.6",
+    "pytest==9.1.1",
+]
+
+[build-system]
+requires = ["uv_build==0.11.28"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "tsdhn_parity"
+module-root = ""

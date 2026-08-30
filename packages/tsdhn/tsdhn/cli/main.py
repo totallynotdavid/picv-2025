@@ -107,7 +107,6 @@ def doctor(
         runtime = RuntimeContext.resolve(
             model_dir=model_dir,
             model_version=model_version,
-            require_tools=False,
         )
         model_status = "available"
         model_detail = str(runtime.model_dir)
@@ -147,7 +146,6 @@ def calc(
     runtime = RuntimeContext.resolve(
         model_dir=model_dir,
         model_version=model_version,
-        require_tools=False,
     )
     calculator = TsunamiCalculator(runtime.model_dir)
     with tempfile.TemporaryDirectory() as tmp:
@@ -223,13 +221,13 @@ def run(
         except Exception as e:
             progress.stop()
             console.print(f"[red]Simulation failed:[/red] {e}")
-            console.print(f"Inspect run directory: [bold]{work_dir}[/bold]")
+            print(f"Inspect run directory: {work_dir}")
             raise typer.Exit(code=1) from e
 
     console.print(_calculation_table(result.calculation.model_dump()))
     console.print("[green]Simulation complete.[/green]")
-    for artifact in result.bundle.artifacts:
-        console.print(f"{artifact.name}: [bold]{artifact.path}[/bold]")
+    for output in result.outputs.files:
+        console.print(f"{output.name}: [bold]{output.path}[/bold]")
 
 
 def main() -> None:

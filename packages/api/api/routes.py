@@ -1,40 +1,43 @@
-"""
-Two routers: `ops_router` is unauthenticated (health/version, for liveness
-probes); `router` carries the service-token dependency on every data route.
-"""
-
 import json
 import logging
 import tempfile
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import UTC, datetime
 from functools import lru_cache, partial
 from pathlib import Path
+from typing import Any
 
 import anyio
+import psycopg
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 
 from api import __version__
-from api.core.jobs import (
-    JobStatus,
-    compute_jobs,
-)
+from api.core import repository
+from api.core.db import CONNECT_TIMEOUT, notify_channel
+from api.core.settings import COMPUTE_DATABASE_URL, SSE_MAX_DURATION
+from api.core.storage import output_store
+from api.core.tasks import enqueue_simulation
 from api.schemas import (
     CalculationPreview,
     HealthStatus,
     JobCreated,
     JobRequest,
     JobStatusResponse,
+    OutputList,
+    StoredOutput,
     VersionInfo,
 )
-from api.security import require_service_token
+from api.security import require_compute_api_token
 from tsdhn.calculator import TsunamiCalculator
-from tsdhn.domain import EarthquakeInput
+from tsdhn.domain import EarthquakeInput, JobStatus
 
 logger = logging.getLogger(__name__)
 
 _TERMINAL = {JobStatus.COMPLETED.value, JobStatus.FAILED.value}
+
+# Proxies may close an idle SSE connection without a keepalive.
+_KEEPALIVE_SECONDS = 20.0
 
 
 @lru_cache(maxsize=1)
@@ -46,7 +49,7 @@ def get_calculator() -> TsunamiCalculator:
 ops_router = APIRouter(prefix="/api/v1", tags=["ops"])
 router = APIRouter(
     prefix="/api/v1",
-    dependencies=[Depends(require_service_token)],
+    dependencies=[Depends(require_compute_api_token)],
     tags=["jobs"],
 )
 
@@ -54,14 +57,12 @@ router = APIRouter(
 @ops_router.get("/health", response_model=HealthStatus)
 async def health() -> HealthStatus:
     database_connected = await anyio.to_thread.run_sync(
-        compute_jobs.is_database_connected
+        repository.is_database_connected
     )
-    storage_connected = await anyio.to_thread.run_sync(
-        compute_jobs.is_storage_connected
-    )
+    storage_connected = await anyio.to_thread.run_sync(output_store.is_connected)
     return HealthStatus(
         status="healthy" if database_connected and storage_connected else "degraded",
-        timestamp=datetime.now().isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
         database_connected=database_connected,
         storage_connected=storage_connected,
     )
@@ -92,13 +93,14 @@ async def create_calculation(data: EarthquakeInput) -> CalculationPreview:
     status_code=status.HTTP_201_CREATED,
 )
 async def create_job(req: JobRequest) -> JobCreated:
-    app_job_id = str(req.app_job_id)
+    simulation_id = str(req.simulation_id)
     try:
         job_status = await anyio.to_thread.run_sync(
             partial(
-                compute_jobs.create_or_get_job,
+                repository.create_or_get_job,
                 data=req.input,
-                external_id=app_job_id,
+                simulation_id=simulation_id,
+                defer=enqueue_simulation,
             )
         )
     except ValueError as e:
@@ -112,34 +114,125 @@ async def create_job(req: JobRequest) -> JobCreated:
             detail="Failed to start simulation pipeline",
         ) from e
 
-    return JobCreated(app_job_id=app_job_id, **job_status)
+    return JobCreated(
+        simulation_id=simulation_id,
+        status=job_status["status"],
+    )
 
 
-@router.get("/jobs/{app_job_id}", response_model=JobStatusResponse)
-async def get_job(app_job_id: str) -> JobStatusResponse:
+@router.get("/jobs/{simulation_id}", response_model=JobStatusResponse)
+async def get_job(simulation_id: str) -> JobStatusResponse:
+    job_status = await _job_status(simulation_id)
+    return JobStatusResponse(simulation_id=simulation_id, **job_status)
+
+
+@router.get("/jobs/{simulation_id}/outputs", response_model=OutputList)
+async def list_outputs(simulation_id: str) -> OutputList:
     try:
-        job_status = await anyio.to_thread.run_sync(
-            compute_jobs.get_job_status, app_job_id
-        )
+        outputs = await anyio.to_thread.run_sync(repository.get_outputs, simulation_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-    return JobStatusResponse(app_job_id=app_job_id, **job_status)
+    return OutputList(
+        simulation_id=simulation_id,
+        outputs=[
+            StoredOutput(
+                name=output["name"],
+                filename=output["filename"],
+                content_type=output["content_type"],
+            )
+            for output in outputs
+        ],
+    )
 
 
-@router.get("/jobs/{app_job_id}/events")
-async def job_events(app_job_id: str) -> StreamingResponse:
+@router.get(
+    "/jobs/{simulation_id}/outputs/{name}",
+    status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+    response_class=RedirectResponse,
+)
+async def get_output(simulation_id: str, name: str) -> RedirectResponse:
+    try:
+        outputs = await anyio.to_thread.run_sync(repository.get_outputs, simulation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+    match = next((output for output in outputs if output["name"] == name), None)
+    if match is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No output '{name}' for this job",
+        )
+
+    url = await anyio.to_thread.run_sync(
+        partial(output_store.presigned_url, match["key"], filename=match["filename"])
+    )
+    return RedirectResponse(url=url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+
+@router.get("/jobs/{simulation_id}/events")
+async def job_events(simulation_id: str) -> StreamingResponse:
+    """Stream job state changes from the job's Postgres notification channel."""
+    try:
+        simulation_uuid = repository.as_uuid(simulation_id)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid or unknown job ID",
+        ) from e
+    channel = notify_channel(simulation_uuid)
+
     async def stream() -> AsyncIterator[str]:
-        while True:
-            try:
-                job_status = await anyio.to_thread.run_sync(
-                    compute_jobs.get_job_status, app_job_id
-                )
-            except ValueError:
-                yield f"event: error\ndata: {json.dumps({'error': 'unknown job'})}\n\n"
-                return
-            yield f"data: {json.dumps({'app_job_id': app_job_id, **job_status})}\n\n"
-            if job_status["status"] in _TERMINAL:
-                return
-            await anyio.sleep(2)
+        try:
+            job_status = await _job_status(simulation_id)
+        except HTTPException:
+            yield _sse_error("unknown job")
+            return
 
-    return StreamingResponse(stream(), media_type="text/event-stream")
+        yield _sse_data(simulation_id, job_status)
+        if job_status["status"] in _TERMINAL:
+            return
+
+        deadline = anyio.current_time() + SSE_MAX_DURATION
+        aconn = await psycopg.AsyncConnection.connect(
+            COMPUTE_DATABASE_URL, autocommit=True, connect_timeout=CONNECT_TIMEOUT
+        )
+        try:
+            await aconn.execute(f"LISTEN {channel}")
+            last = job_status
+            while anyio.current_time() < deadline:
+                notified = False
+                async for _ in aconn.notifies(timeout=_KEEPALIVE_SECONDS, stop_after=1):
+                    notified = True
+
+                # Read on every tick to cover notifications that race the wait.
+                job_status = await _job_status(simulation_id)
+                if job_status != last:
+                    last = job_status
+                    yield _sse_data(simulation_id, job_status)
+                    if job_status["status"] in _TERMINAL:
+                        return
+                elif not notified:
+                    yield ": keepalive\n\n"
+        finally:
+            await aconn.close()
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
+    )
+
+
+async def _job_status(simulation_id: str) -> dict[str, Any]:
+    try:
+        return await anyio.to_thread.run_sync(repository.get_job_status, simulation_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+
+def _sse_data(simulation_id: str, job_status: dict[str, Any]) -> str:
+    return f"data: {json.dumps({'simulation_id': simulation_id, **job_status})}\n\n"
+
+
+def _sse_error(message: str) -> str:
+    return f"event: error\ndata: {json.dumps({'error': message})}\n\n"

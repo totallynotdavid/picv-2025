@@ -76,12 +76,10 @@
     return () => map?.remove();
   });
 
-  // Form edits can update coordinates without a map click.
   $effect(() => {
     marker?.setLngLat([lon, lat]);
   });
 
-  // Fault geometry arrives after the backend preview completes.
   $effect(() => {
     const data = faultData();
     if (ready) {

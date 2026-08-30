@@ -1,32 +1,10 @@
 import { error } from "@sveltejs/kit";
 
-import { backend } from "$lib/server/api";
-import { listSimulations, syncStatus } from "$lib/server/simulations";
-
 import type { PageServerLoad } from "./$types";
 
-export const load: PageServerLoad = async ({ locals, fetch }) => {
+export const load: PageServerLoad = async ({ locals }) => {
   const user = locals.user;
   if (!user) error(401);
 
-  const simulations = await listSimulations(user.id);
-  const client = backend(fetch);
-
-  await Promise.all(
-    simulations
-      .filter((s) => s.computeJobId && (s.status === "queued" || s.status === "running"))
-      .map(async (s) => {
-        const { data } = await client.GET("/api/v1/jobs/{app_job_id}", {
-          params: { path: { app_job_id: s.id } },
-        });
-        if (data) {
-          await syncStatus(s.id, data.status, data.artifacts_available, data);
-          s.status = data.status;
-          s.artifactsAvailable = data.artifacts_available;
-          s.error = data.error ?? null;
-        }
-      }),
-  );
-
-  return { simulations };
+  return { simulations: await locals.simulationRepository.listSimulations(user.id) };
 };

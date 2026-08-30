@@ -2,6 +2,9 @@ import logging
 import subprocess
 from pathlib import Path
 
+import pygmt
+from pygmt.clib import Session
+
 from tsdhn.external import resolve
 from tsdhn.render.meca import read_meca_spec
 
@@ -52,15 +55,13 @@ def ttt_inverso_python(working_dir: Path) -> None:
         logger.exception("ttt_client execution failed: %s", e)
         raise
 
+    # PyGMT does not expose grdmath. The no-op rewrite makes the ttt_client
+    # grid header readable by the later GMT contour step.
+    grid_arg = f"{working_dir / 'ttt.b'}=bf"
     try:
-        subprocess.run(
-            [str(resolve("gmt")), "grdmath", "ttt.b=bf", "1.0", "MUL", "=", "ttt.b=bf"],
-            cwd=working_dir,
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-        )
+        with Session() as session:
+            session.call_module("grdmath", [grid_arg, "1.0", "MUL", "=", grid_arg])
         logger.info("grdmath executed successfully.")
-    except subprocess.CalledProcessError as e:
+    except pygmt.exceptions.GMTError as e:
         logger.exception("grdmath execution failed: %s", e)
         raise

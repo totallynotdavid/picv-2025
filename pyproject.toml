@@ -10,11 +10,12 @@ authors = [
 ]
 
 [tool.uv.workspace]
-members = ["packages/tsdhn", "packages/api"]
+members = ["packages/tsdhn", "packages/api", "packages/tsdhn-parity"]
 
 [tool.uv.sources]
 tsdhn = { workspace = true }
 tsdhn-api = { workspace = true }
+tsdhn-parity = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -27,6 +28,7 @@ dev = [
     "pytest-cov==7.1.0",
     "httpx2==2.5.0",
     "coverage==7.15.0",
+    "diff-cover==10.5.1",
     "bandit==1.9.4",
     "pip-audit==2.10.1",
 ]
@@ -51,14 +53,16 @@ extend-exclude = ["__pycache__", "dist", "build"]
 select = ["E", "F", "W", "I", "B", "UP", "S", "SIM", "RUF"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["tsdhn", "api"]
+known-first-party = ["tsdhn", "api", "tsdhn_parity"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**/*.py" = ["S101", "S105", "S106"]  # asserts and dummy tokens are fine in tests
 # S603 is suppressed: every subprocess call uses arguments from
 # validated floats, local Path objects, or frozen dataclass fields.
-"packages/tsdhn/tsdhn/pipeline/types.py" = ["S603"]
+"packages/tsdhn-parity/tsdhn_parity/adapters/fortran.py" = ["S603"]
 "packages/tsdhn/tsdhn/render/ttt_inverso.py" = ["S603"]
+"packages/tsdhn/tests/test_pipeline_golden.py" = ["S603"]
+"scripts/capture_matlab_fixtures.py" = ["S603"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -74,11 +78,14 @@ disallow_untyped_defs = true
 
 [tool.coverage.run]
 branch = true
-source = ["packages"]
+# tsdhn-parity is a comparison harness against legacy MATLAB/Fortran
+# reference outputs, not shipped product code (see its readme). Whether
+# the harness itself is well-tested is a different question from whether
+# the product is, so it is not measured here.
+source = ["packages/tsdhn/tsdhn", "packages/api/api"]
 omit = ["**/tests/*", "**/__init__.py"]
 
 [tool.coverage.report]
-fail_under = 50
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",
@@ -87,5 +94,10 @@ exclude_lines = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["packages/tsdhn/tests", "packages/api/tests"]
+testpaths = ["packages/tsdhn/tests", "packages/api/tests", "packages/tsdhn-parity/tests"]
+pythonpath = ["."]
 addopts = "-ra"
+markers = [
+    "golden: requires the real compiled toolchain; see mise run test-golden",
+    "integration: uses disposable databases on the mise-managed PostgreSQL cluster; see mise run test-integration",
+]

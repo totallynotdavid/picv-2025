@@ -44,14 +44,12 @@ def determine_tsunami_warning(Mw: float, h: float, h0: float, dist_min: float) -
     if h0 > 0:
         if dist_min < 50:
             return LAND_NEAR_COAST_WARNING
-        if dist_min > 50:
-            return LAND_NO_TSUNAMI_WARNING
-    elif h0 <= 0:
-        if h > 60 or Mw < 7.0:
-            return SEA_NO_TSUNAMI_WARNING
-        for threshold, message in SEA_TSUNAMI_TIERS:
-            if Mw >= threshold:
-                return message
+        return LAND_NO_TSUNAMI_WARNING
+    if h > 60 or Mw < 7.0:
+        return SEA_NO_TSUNAMI_WARNING
+    for threshold, message in SEA_TSUNAMI_TIERS:
+        if Mw >= threshold:
+            return message
     return NO_TSUNAMI_WARNING
 
 

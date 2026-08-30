@@ -1,8 +1,4 @@
-"""
-Print the FastAPI OpenAPI schema to stdout without starting a server.
-Used by `scripts/gen-client.ts` to regenerate the typed TS client hermetically
-(no running backend or compute worker).
-"""
+"""Print the FastAPI OpenAPI schema without starting a server."""
 
 import json
 

@@ -1,6 +1,12 @@
+import contextlib
+import os
 import shutil
-from collections.abc import Sequence
+from collections.abc import Iterator
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from tsdhn.pipeline.types import ProcessingStep
 
 WORKSPACE_DIRS: tuple[str, ...] = ("bathy", "ttt_mundo", "zfolder")
 WORKSPACE_INPUTS: tuple[str, ...] = (
@@ -17,34 +23,55 @@ def make_executable(file_path: Path) -> None:
     file_path.chmod(file_path.stat().st_mode | 0o111)
 
 
-def validate_files(cwd: Path, checks: Sequence[tuple[str, str]]) -> None:
-    missing = []
-    for filename, msg in checks:
-        if not (cwd / filename).exists():
-            missing.append(f"{filename}: {msg}")
-    if missing:
-        raise FileNotFoundError("\n".join(missing))
+@contextlib.contextmanager
+def atomic_write(path: Path) -> Iterator[Path]:
+    """Yield a sibling temp path; rename it onto `path` only on clean exit.
 
-
-def prepare_simulation_workspace(model_dir: Path, work_dir: Path) -> None:
-    """Create the per-run filesystem expected by the legacy pipeline.
-
-    Only immutable inputs required by the active pipeline are linked/copied into
-    the workspace. Generated files are intentionally absent at startup.
+    A killed writer must not leave a truncated file that passes the existence
+    check used by resume and skip logic. `os.replace` is atomic on POSIX, so
+    readers see the old file, no file, or the complete new file.
     """
-    if work_dir.exists():
+    tmp_path = path.parent / f"{path.name}.tmp"
+    try:
+        yield tmp_path
+    except BaseException:
+        tmp_path.unlink(missing_ok=True)
+        raise
+    else:
+        os.replace(tmp_path, path)
+
+
+def validate_outputs(working_dir: Path, step: ProcessingStep) -> None:
+    """Raise if any of `step`'s declared outputs is absent from disk.
+
+    Paths are resolved relative to `working_dir`, which is the step's own
+    directory (see ProcessingStep.outputs).
+    """
+    missing = [name for name in step.outputs if not (working_dir / name).exists()]
+    if missing:
+        raise FileNotFoundError(
+            f"Step '{step.name}' did not produce: {', '.join(missing)}"
+        )
+
+
+def prepare_simulation_workspace(
+    model_dir: Path, work_dir: Path, *, resume: bool = False
+) -> None:
+    """Create a clean simulation workspace, unless `resume` is true."""
+    if work_dir.exists() and not resume:
         shutil.rmtree(work_dir)
-    work_dir.mkdir(parents=True)
+    work_dir.mkdir(parents=True, exist_ok=True)
 
     for dirname in WORKSPACE_DIRS:
-        (work_dir / dirname).mkdir()
+        (work_dir / dirname).mkdir(exist_ok=True)
 
     for relative_name in WORKSPACE_INPUTS:
         source = model_dir / relative_name
         if not source.is_file():
             raise FileNotFoundError(f"Required model input missing: {source}")
         destination = work_dir / relative_name
-        _link_or_copy(source, destination)
+        if not destination.exists():
+            _link_or_copy(source, destination)
 
 
 def _link_or_copy(source: Path, destination: Path) -> None:
