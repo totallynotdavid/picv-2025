@@ -19,7 +19,7 @@ export interface EarthquakeInput {
   hhmm: string;
 }
 
-/** The backend expects event day and time in UTC fields. */
+/** The compute API expects event day and time in UTC fields. */
 export function toEarthquakeInput(values: EarthquakeForm): EarthquakeInput {
   const when = new Date(values.datetime);
   const dia = String(when.getUTCDate()).padStart(2, "0");

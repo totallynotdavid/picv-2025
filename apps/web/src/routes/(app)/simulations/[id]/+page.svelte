@@ -9,29 +9,41 @@
   import Button from "$lib/components/ui/Button.svelte";
 
   let { data, form } = $props();
-  type JobStatusResponse = components["schemas"]["JobStatusResponse"];
+  type Calculation = components["schemas"]["CalculationResponse"];
+  type JobStatusResponse = {
+    simulation_id: string;
+    status: string;
+    details: string | null;
+    step: string | null;
+    step_index: number | null;
+    total_steps: number | null;
+    calculation: Calculation | null;
+    travel_times: unknown;
+    error: string | null;
+    finished_at: string | null;
+    outputs: string[];
+  };
 
   const params = $derived(data.sim.params as EarthquakeInput);
   const simulationId = $derived(data.sim.id);
 
   function statusFromSnapshot(): JobStatusResponse {
     return {
-      app_job_id: data.sim.id,
-      compute_job_id: data.sim.computeJobId ?? "",
+      simulation_id: data.sim.id,
       status: data.sim.status,
       details: data.sim.details,
       step: data.sim.step,
       step_index: data.sim.stepIndex,
       total_steps: data.sim.totalSteps,
-      calculation: data.sim.calculation as JobStatusResponse["calculation"],
-      travel_times: data.sim.travelTimes as JobStatusResponse["travel_times"],
+      calculation: data.sim.calculation as Calculation | null,
+      travel_times: data.sim.travelTimes,
       error: data.sim.error,
       finished_at: data.sim.finishedAt?.toISOString() ?? null,
-      artifacts: data.sim.artifacts,
+      outputs: data.sim.outputs,
     };
   }
 
-  const ARTIFACT_LABEL: Record<string, string> = {
+  const OUTPUT_LABEL: Record<string, string> = {
     max_height_map: "Mapa de altura máxima (PDF)",
     arrival_time_map: "Mapa de tiempos de arribo (PDF)",
     mareogram: "Mareograma (SVG)",
@@ -46,7 +58,7 @@
     return (
       status === "completed" ||
       status === "failed" ||
-      status === "dispatch_failed" ||
+      status === "submission_failed" ||
       status === "cancelled"
     );
   }
@@ -54,7 +66,7 @@
   let live = $state<JobStatusResponse>(statusFromSnapshot());
 
   const terminal = $derived(isTerminal(live.status));
-  const retryable = $derived(live.status === "pending_dispatch" || live.status === "dispatch_failed");
+  const retryable = $derived(live.status === "submitting" || live.status === "submission_failed");
   const percent = $derived(
     live.step_index !== null && live.step_index !== undefined && live.total_steps
       ? Math.round((live.step_index / live.total_steps) * 100)
@@ -66,8 +78,8 @@
   );
 
   const STATUS_LABEL: Record<string, string> = {
-    pending_dispatch: "Preparando",
-    dispatch_failed: "No enviada",
+    submitting: "Enviando",
+    submission_failed: "No enviada",
     queued: "En cola",
     running: "Ejecutándose",
     completed: "Completada",
@@ -80,7 +92,7 @@
     const initial = statusFromSnapshot();
     live = initial;
 
-    if (isTerminal(initial.status) || !data.sim.computeJobId) return;
+    if (isTerminal(initial.status) || retryable) return;
 
     const es = new EventSource(`/simulations/${id}/events`);
     es.onmessage = (event) => {
@@ -92,7 +104,7 @@
           void invalidateAll();
         }
       } catch {
-        // Keep the stream open when a backend frame is not JSON.
+        // Keepalive frames are not JSON status updates.
       }
     };
     es.onerror = () => es.close();
@@ -137,7 +149,7 @@
       </div>
     {/if}
 
-    {#if live.status === "failed" || live.status === "dispatch_failed"}
+    {#if live.status === "failed" || live.status === "submission_failed"}
       <Alert tone="error" title="La simulación falló">
         {live.error ?? "Error desconocido."}
       </Alert>
@@ -162,17 +174,17 @@
       </div>
     {/if}
 
-    {#if live.status === "completed" && live.artifacts.length > 0}
+    {#if live.status === "completed" && live.outputs.length > 0}
       <div class="rounded-xl border border-neutral-200 bg-white p-6">
         <h2 class="mb-3 text-lg font-semibold text-neutral-900">Resultados</h2>
         <ul class="space-y-2">
-          {#each live.artifacts as name (name)}
+          {#each live.outputs as name (name)}
             <li>
               <a
                 class="text-brand-600 hover:underline"
-                href="/simulations/{simulationId}/artifacts/{name}"
+                href="/simulations/{simulationId}/outputs/{name}"
               >
-                {ARTIFACT_LABEL[name] ?? name}
+                {OUTPUT_LABEL[name] ?? name}
               </a>
             </li>
           {/each}

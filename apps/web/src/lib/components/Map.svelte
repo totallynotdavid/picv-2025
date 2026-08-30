@@ -76,12 +76,10 @@
     return () => map?.remove();
   });
 
-  // Keep the marker in sync with form edits.
   $effect(() => {
     marker?.setLngLat([lon, lat]);
   });
 
-  // Add the fault polygon after preview data arrives.
   $effect(() => {
     const data = faultData();
     if (ready) {
