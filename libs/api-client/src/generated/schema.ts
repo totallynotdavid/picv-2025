@@ -72,7 +72,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/jobs/{app_job_id}": {
+    "/api/v1/jobs/{simulation_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -80,7 +80,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Job */
-        get: operations["get_job_api_v1_jobs__app_job_id__get"];
+        get: operations["get_job_api_v1_jobs__simulation_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -89,15 +89,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/jobs/{app_job_id}/artifacts": {
+    "/api/v1/jobs/{simulation_id}/outputs": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Artifacts */
-        get: operations["list_artifacts_api_v1_jobs__app_job_id__artifacts_get"];
+        /** List Outputs */
+        get: operations["list_outputs_api_v1_jobs__simulation_id__outputs_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -106,7 +106,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/jobs/{app_job_id}/artifacts/{name}": {
+    "/api/v1/jobs/{simulation_id}/outputs/{name}": {
         parameters: {
             query?: never;
             header?: never;
@@ -114,10 +114,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Artifact
+         * Get Output
          * @description Redirect the client to a short-lived MinIO URL.
          */
-        get: operations["get_artifact_api_v1_jobs__app_job_id__artifacts__name__get"];
+        get: operations["get_output_api_v1_jobs__simulation_id__outputs__name__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -126,7 +126,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/jobs/{app_job_id}/events": {
+    "/api/v1/jobs/{simulation_id}/events": {
         parameters: {
             query?: never;
             header?: never;
@@ -137,7 +137,7 @@ export interface paths {
          * Job Events
          * @description Stream job state changes from the job's Postgres notification channel.
          */
-        get: operations["job_events_api_v1_jobs__app_job_id__events_get"];
+        get: operations["job_events_api_v1_jobs__simulation_id__events_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -150,22 +150,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** ArtifactList */
-        ArtifactList: {
-            /** App Job Id */
-            app_job_id: string;
-            /** Artifacts */
-            artifacts: components["schemas"]["ArtifactRef"][];
-        };
-        /** ArtifactRef */
-        ArtifactRef: {
-            /** Name */
-            name: string;
-            /** Filename */
-            filename: string;
-            /** Content Type */
-            content_type: string;
-        };
         /**
          * CalculationPreview
          * @description Preview data returned before committing to a queued simulation.
@@ -242,32 +226,24 @@ export interface components {
         };
         /** JobCreated */
         JobCreated: {
-            /** App Job Id */
-            app_job_id: string;
-            /** Compute Job Id */
-            compute_job_id: string;
+            /** Simulation Id */
+            simulation_id: string;
             /** Status */
             status: string;
-            /** Result Bucket */
-            result_bucket?: string | null;
-            /** Result Key */
-            result_key?: string | null;
         };
         /** JobRequest */
         JobRequest: {
             /**
-             * App Job Id
+             * Simulation Id
              * Format: uuid
              */
-            app_job_id: string;
+            simulation_id: string;
             input: components["schemas"]["EarthquakeInput"];
         };
         /** JobStatusResponse */
         JobStatusResponse: {
-            /** App Job Id */
-            app_job_id: string;
-            /** Compute Job Id */
-            compute_job_id: string;
+            /** Simulation Id */
+            simulation_id: string;
             /** Status */
             status: string;
             /** Details */
@@ -280,10 +256,6 @@ export interface components {
             total_steps?: number | null;
             calculation?: components["schemas"]["CalculationResponse"] | null;
             travel_times?: components["schemas"]["TsunamiTravelResponse"] | null;
-            /** Result Bucket */
-            result_bucket?: string | null;
-            /** Result Key */
-            result_key?: string | null;
             /** Error */
             error?: string | null;
             /** Created At */
@@ -293,10 +265,26 @@ export interface components {
             /** Finished At */
             finished_at?: string | null;
             /**
-             * Artifacts
+             * Outputs
              * @default []
              */
-            artifacts: string[];
+            outputs: string[];
+        };
+        /** OutputList */
+        OutputList: {
+            /** Simulation Id */
+            simulation_id: string;
+            /** Outputs */
+            outputs: components["schemas"]["StoredOutput"][];
+        };
+        /** StoredOutput */
+        StoredOutput: {
+            /** Name */
+            name: string;
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
         };
         /** TsunamiTravelResponse */
         TsunamiTravelResponse: {
@@ -452,14 +440,14 @@ export interface operations {
             };
         };
     };
-    get_job_api_v1_jobs__app_job_id__get: {
+    get_job_api_v1_jobs__simulation_id__get: {
         parameters: {
             query?: never;
             header?: {
                 authorization?: string | null;
             };
             path: {
-                app_job_id: string;
+                simulation_id: string;
             };
             cookie?: never;
         };
@@ -485,14 +473,14 @@ export interface operations {
             };
         };
     };
-    list_artifacts_api_v1_jobs__app_job_id__artifacts_get: {
+    list_outputs_api_v1_jobs__simulation_id__outputs_get: {
         parameters: {
             query?: never;
             header?: {
                 authorization?: string | null;
             };
             path: {
-                app_job_id: string;
+                simulation_id: string;
             };
             cookie?: never;
         };
@@ -504,7 +492,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ArtifactList"];
+                    "application/json": components["schemas"]["OutputList"];
                 };
             };
             /** @description Validation Error */
@@ -518,14 +506,14 @@ export interface operations {
             };
         };
     };
-    get_artifact_api_v1_jobs__app_job_id__artifacts__name__get: {
+    get_output_api_v1_jobs__simulation_id__outputs__name__get: {
         parameters: {
             query?: never;
             header?: {
                 authorization?: string | null;
             };
             path: {
-                app_job_id: string;
+                simulation_id: string;
                 name: string;
             };
             cookie?: never;
@@ -550,14 +538,14 @@ export interface operations {
             };
         };
     };
-    job_events_api_v1_jobs__app_job_id__events_get: {
+    job_events_api_v1_jobs__simulation_id__events_get: {
         parameters: {
             query?: never;
             header?: {
                 authorization?: string | null;
             };
             path: {
-                app_job_id: string;
+                simulation_id: string;
             };
             cookie?: never;
         };

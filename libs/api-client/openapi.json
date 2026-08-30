@@ -165,21 +165,21 @@
         }
       }
     },
-    "/api/v1/jobs/{app_job_id}": {
+    "/api/v1/jobs/{simulation_id}": {
       "get": {
         "tags": [
           "jobs"
         ],
         "summary": "Get Job",
-        "operationId": "get_job_api_v1_jobs__app_job_id__get",
+        "operationId": "get_job_api_v1_jobs__simulation_id__get",
         "parameters": [
           {
-            "name": "app_job_id",
+            "name": "simulation_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "App Job Id"
+              "title": "Simulation Id"
             }
           },
           {
@@ -223,21 +223,21 @@
         }
       }
     },
-    "/api/v1/jobs/{app_job_id}/artifacts": {
+    "/api/v1/jobs/{simulation_id}/outputs": {
       "get": {
         "tags": [
           "jobs"
         ],
-        "summary": "List Artifacts",
-        "operationId": "list_artifacts_api_v1_jobs__app_job_id__artifacts_get",
+        "summary": "List Outputs",
+        "operationId": "list_outputs_api_v1_jobs__simulation_id__outputs_get",
         "parameters": [
           {
-            "name": "app_job_id",
+            "name": "simulation_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "App Job Id"
+              "title": "Simulation Id"
             }
           },
           {
@@ -263,7 +263,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ArtifactList"
+                  "$ref": "#/components/schemas/OutputList"
                 }
               }
             }
@@ -281,22 +281,22 @@
         }
       }
     },
-    "/api/v1/jobs/{app_job_id}/artifacts/{name}": {
+    "/api/v1/jobs/{simulation_id}/outputs/{name}": {
       "get": {
         "tags": [
           "jobs"
         ],
-        "summary": "Get Artifact",
+        "summary": "Get Output",
         "description": "Redirect the client to a short-lived MinIO URL.",
-        "operationId": "get_artifact_api_v1_jobs__app_job_id__artifacts__name__get",
+        "operationId": "get_output_api_v1_jobs__simulation_id__outputs__name__get",
         "parameters": [
           {
-            "name": "app_job_id",
+            "name": "simulation_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "App Job Id"
+              "title": "Simulation Id"
             }
           },
           {
@@ -342,22 +342,22 @@
         }
       }
     },
-    "/api/v1/jobs/{app_job_id}/events": {
+    "/api/v1/jobs/{simulation_id}/events": {
       "get": {
         "tags": [
           "jobs"
         ],
         "summary": "Job Events",
         "description": "Stream job state changes from the job's Postgres notification channel.",
-        "operationId": "job_events_api_v1_jobs__app_job_id__events_get",
+        "operationId": "job_events_api_v1_jobs__simulation_id__events_get",
         "parameters": [
           {
-            "name": "app_job_id",
+            "name": "simulation_id",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "App Job Id"
+              "title": "Simulation Id"
             }
           },
           {
@@ -402,50 +402,6 @@
   },
   "components": {
     "schemas": {
-      "ArtifactList": {
-        "properties": {
-          "app_job_id": {
-            "type": "string",
-            "title": "App Job Id"
-          },
-          "artifacts": {
-            "items": {
-              "$ref": "#/components/schemas/ArtifactRef"
-            },
-            "type": "array",
-            "title": "Artifacts"
-          }
-        },
-        "type": "object",
-        "required": [
-          "app_job_id",
-          "artifacts"
-        ],
-        "title": "ArtifactList"
-      },
-      "ArtifactRef": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "filename": {
-            "type": "string",
-            "title": "Filename"
-          },
-          "content_type": {
-            "type": "string",
-            "title": "Content Type"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "filename",
-          "content_type"
-        ],
-        "title": "ArtifactRef"
-      },
       "CalculationPreview": {
         "properties": {
           "calculation": {
@@ -630,55 +586,28 @@
       },
       "JobCreated": {
         "properties": {
-          "app_job_id": {
+          "simulation_id": {
             "type": "string",
-            "title": "App Job Id"
-          },
-          "compute_job_id": {
-            "type": "string",
-            "title": "Compute Job Id"
+            "title": "Simulation Id"
           },
           "status": {
             "type": "string",
             "title": "Status"
-          },
-          "result_bucket": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Result Bucket"
-          },
-          "result_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Result Key"
           }
         },
         "type": "object",
         "required": [
-          "app_job_id",
-          "compute_job_id",
+          "simulation_id",
           "status"
         ],
         "title": "JobCreated"
       },
       "JobRequest": {
         "properties": {
-          "app_job_id": {
+          "simulation_id": {
             "type": "string",
             "format": "uuid",
-            "title": "App Job Id"
+            "title": "Simulation Id"
           },
           "input": {
             "$ref": "#/components/schemas/EarthquakeInput"
@@ -686,20 +615,16 @@
         },
         "type": "object",
         "required": [
-          "app_job_id",
+          "simulation_id",
           "input"
         ],
         "title": "JobRequest"
       },
       "JobStatusResponse": {
         "properties": {
-          "app_job_id": {
+          "simulation_id": {
             "type": "string",
-            "title": "App Job Id"
-          },
-          "compute_job_id": {
-            "type": "string",
-            "title": "Compute Job Id"
+            "title": "Simulation Id"
           },
           "status": {
             "type": "string",
@@ -769,28 +694,6 @@
               }
             ]
           },
-          "result_bucket": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Result Bucket"
-          },
-          "result_key": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Result Key"
-          },
           "error": {
             "anyOf": [
               {
@@ -835,22 +738,65 @@
             ],
             "title": "Finished At"
           },
-          "artifacts": {
+          "outputs": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Artifacts",
+            "title": "Outputs",
             "default": []
           }
         },
         "type": "object",
         "required": [
-          "app_job_id",
-          "compute_job_id",
+          "simulation_id",
           "status"
         ],
         "title": "JobStatusResponse"
+      },
+      "OutputList": {
+        "properties": {
+          "simulation_id": {
+            "type": "string",
+            "title": "Simulation Id"
+          },
+          "outputs": {
+            "items": {
+              "$ref": "#/components/schemas/StoredOutput"
+            },
+            "type": "array",
+            "title": "Outputs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "simulation_id",
+          "outputs"
+        ],
+        "title": "OutputList"
+      },
+      "StoredOutput": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "filename",
+          "content_type"
+        ],
+        "title": "StoredOutput"
       },
       "TsunamiTravelResponse": {
         "properties": {
