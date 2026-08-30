@@ -44,7 +44,7 @@ APP_DB_ROLE = os.environ.get("APP_DB_ROLE", "tsdhn_app")
 APP_DB_PASSWORD = os.environ.get("APP_DB_PASSWORD", "")
 
 MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "localhost:9000")
-# Public endpoint may differ from API endpoint; the browser downloads directly from MinIO.
+# Public endpoint differs from API endpoint for browser downloads.
 MINIO_PUBLIC_ENDPOINT = os.environ.get("MINIO_PUBLIC_ENDPOINT", MINIO_ENDPOINT)
 MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "minioadmin")
 MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "minioadmin")
