@@ -209,20 +209,22 @@ jobs:
         runs-on: ubuntu-latest
         permissions:
             contents: read
+        services:
+            postgres:
+                image: postgres:18
+                env:
+                    POSTGRES_USER: tsdhn
+                    POSTGRES_PASSWORD: tsdhn
+                    POSTGRES_DB: tsdhn
+                options: >-
+                    --health-cmd pg_isready
+                    --health-interval 10s
+                    --health-timeout 5s
+                    --health-retries 5
+                ports:
+                    - 5432:5432
         steps:
             - uses: actions/checkout@v7
-
-            - name: Install PostgreSQL build dependencies
-              run: |
-                  sudo apt-get update
-                  sudo apt-get install -y --no-install-recommends \
-                    build-essential libreadline-dev libz-dev libssl-dev
-
-            - uses: jdx/mise-action@v4
-              with:
-                  install: false
-
-            - run: mise install postgres
 
             - uses: astral-sh/setup-uv@6a191366842ac1502ba6c07e9b5acd5c2d9d8db3 # 8.3.2
               with:
@@ -241,6 +243,8 @@ jobs:
 
             - name: Run disposable database integration tests
               run: bash scripts/integration.sh --coverage
+              env:
+                  COMPUTE_DATABASE_URL: postgresql://tsdhn:tsdhn@localhost:5432/tsdhn
 
             - name: Name coverage data
               if: always()
