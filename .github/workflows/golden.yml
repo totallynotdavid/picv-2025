@@ -1,16 +1,6 @@
 name: Golden pipeline regression
 
-# Runs the real pipeline (Python steps plus GMT and ttt_client) end-to-end
-# for a fixed earthquake scenario and checks numeric fingerprints from
-# packages/tsdhn/tests/test_pipeline_golden.py. The ifx-compiled Fortran
-# binaries are used only by the parity suite (mise run test-parity).
-#
-# workflow_dispatch only, deliberately: a real run takes ~15-30+ min of
-# compute (dominated by the tsunami wave-propagation step) even with the
-# toolchain image cached, so this must never run automatically on every
-# push/PR and burn GitHub-hosted minutes. Trigger manually when
-# packages/tsdhn/tsdhn/{pipeline,render}/** or model/** changes in a way
-# that might affect simulation output.
+# Run the full pipeline regression against the real scientific toolchain.
 on:
     workflow_dispatch:
 
