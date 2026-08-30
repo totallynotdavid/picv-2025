@@ -2,41 +2,20 @@ import { error, fail, redirect } from "@sveltejs/kit";
 
 import { backend } from "$lib/server/api";
 import { dispatchSimulation } from "$lib/server/dispatch";
-import { getSimulation, syncStatus } from "$lib/server/simulations";
+import { getSimulation } from "$lib/server/simulations";
 
 import type { Actions, PageServerLoad } from "./$types";
 
-const TERMINAL = new Set(["completed", "failed", "dispatch_failed", "cancelled"]);
 const RETRYABLE = new Set(["pending_dispatch", "dispatch_failed"]);
 
-export const load: PageServerLoad = async ({ params, locals, fetch }) => {
+export const load: PageServerLoad = async ({ params, locals }) => {
   const user = locals.user;
   if (!user) error(401);
 
   const sim = await getSimulation(user.id, params.id);
   if (!sim) error(404, "Simulación no encontrada");
 
-  if (TERMINAL.has(sim.status)) return { sim, status: null };
-  if (!sim.computeJobId) return { sim, status: null };
-
-  const client = backend(fetch);
-  const { data: status } = await client.GET("/api/v1/jobs/{app_job_id}", {
-    params: { path: { app_job_id: sim.id } },
-  });
-  if (status) {
-    await syncStatus(sim.id, status.status, status.artifacts_available, status);
-    sim.status = status.status;
-    sim.artifactsAvailable = status.artifacts_available;
-    sim.details = status.details ?? null;
-    sim.step = status.step ?? null;
-    sim.stepIndex = status.step_index ?? null;
-    sim.totalSteps = status.total_steps ?? null;
-    sim.calculation = status.calculation ?? null;
-    sim.travelTimes = status.travel_times ?? null;
-    sim.error = status.error ?? null;
-  }
-
-  return { sim, status: status ?? null };
+  return { sim };
 };
 
 export const actions: Actions = {

@@ -89,6 +89,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs/{app_job_id}/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Artifacts */
+        get: operations["list_artifacts_api_v1_jobs__app_job_id__artifacts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{app_job_id}/artifacts/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Artifact
+         * @description Redirect the client to a short-lived MinIO URL.
+         */
+        get: operations["get_artifact_api_v1_jobs__app_job_id__artifacts__name__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jobs/{app_job_id}/events": {
         parameters: {
             query?: never;
@@ -96,7 +133,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Job Events */
+        /**
+         * Job Events
+         * @description Stream job state changes from the job's Postgres notification channel.
+         */
         get: operations["job_events_api_v1_jobs__app_job_id__events_get"];
         put?: never;
         post?: never;
@@ -110,6 +150,22 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ArtifactList */
+        ArtifactList: {
+            /** App Job Id */
+            app_job_id: string;
+            /** Artifacts */
+            artifacts: components["schemas"]["ArtifactRef"][];
+        };
+        /** ArtifactRef */
+        ArtifactRef: {
+            /** Name */
+            name: string;
+            /** Filename */
+            filename: string;
+            /** Content Type */
+            content_type: string;
+        };
         /**
          * CalculationPreview
          * @description Preview data returned before committing to a queued simulation.
@@ -237,10 +293,10 @@ export interface components {
             /** Finished At */
             finished_at?: string | null;
             /**
-             * Artifacts Available
-             * @default false
+             * Artifacts
+             * @default []
              */
-            artifacts_available: boolean;
+            artifacts: string[];
         };
         /** TsunamiTravelResponse */
         TsunamiTravelResponse: {
@@ -417,6 +473,71 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["JobStatusResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_artifacts_api_v1_jobs__app_job_id__artifacts_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                app_job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_artifact_api_v1_jobs__app_job_id__artifacts__name__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                app_job_id: string;
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            307: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

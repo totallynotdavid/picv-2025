@@ -1,7 +1,6 @@
 import type { TsdhnClient } from "@tsdhn/api-client";
 
 import type { EarthquakeInput } from "$lib/schema/earthquake";
-import type { Simulation } from "$lib/server/db/schema";
 import { markDispatchAccepted, markDispatchFailed } from "$lib/server/simulations";
 
 const DEFAULT_COMPUTE_BACKEND = "default";
@@ -12,7 +11,7 @@ function errorMessage(error: unknown): string {
 }
 
 export async function dispatchSimulation(
-  sim: Pick<Simulation, "id" | "params">,
+  sim: { id: string; params: unknown },
   client: TsdhnClient,
   computeBackend = DEFAULT_COMPUTE_BACKEND,
 ): Promise<{ ok: true; computeJobId: string } | { ok: false; error: string }> {

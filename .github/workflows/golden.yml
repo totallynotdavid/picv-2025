@@ -1,0 +1,65 @@
+name: Golden pipeline regression
+
+# Runs the real pipeline (Python steps plus GMT and ttt_client) end-to-end
+# for a fixed earthquake scenario and checks numeric fingerprints from
+# packages/tsdhn/tests/test_pipeline_golden.py. The ifx-compiled Fortran
+# binaries are used only by the parity suite (mise run test-parity).
+#
+# workflow_dispatch only, deliberately: a real run takes ~15-30+ min of
+# compute (dominated by the tsunami wave-propagation step) even with the
+# toolchain image cached, so this must never run automatically on every
+# push/PR and burn GitHub-hosted minutes. Trigger manually when
+# packages/tsdhn/tsdhn/{pipeline,render}/** or model/** changes in a way
+# that might affect simulation output.
+on:
+    workflow_dispatch:
+
+concurrency:
+    group: golden-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+permissions: {}
+
+jobs:
+    golden:
+        name: Golden pipeline (real toolchain)
+        runs-on: ubuntu-latest
+        timeout-minutes: 60
+        permissions:
+            contents: read
+        steps:
+            - uses: actions/checkout@v7
+
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+            - name: Build toolchain image (cached)
+              uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+              with:
+                  context: .
+                  file: deploy/toolchain.Dockerfile
+                  tags: localhost/tsdhn-toolchain:golden-ci
+                  load: true
+                  cache-from: type=gha,scope=toolchain
+                  cache-to: type=gha,mode=max,scope=toolchain
+
+            - name: Build api image (cached)
+              uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+              with:
+                  context: .
+                  file: deploy/api.Dockerfile
+                  build-args: TOOLCHAIN_IMAGE=localhost/tsdhn-toolchain:golden-ci
+                  tags: localhost/tsdhn-api:golden-ci
+                  load: true
+                  cache-from: type=gha,scope=api
+                  cache-to: type=gha,mode=max,scope=api
+
+            - name: Run golden suite against the real toolchain
+              run: |
+                  docker run --rm \
+                    localhost/tsdhn-api:golden-ci \
+                    sh -c '
+                      set -eu
+                      uv sync --frozen --group dev --all-packages
+                      uv run pytest -m golden -v packages/tsdhn/tests/test_pipeline_golden.py
+                    '

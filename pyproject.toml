@@ -78,7 +78,7 @@ source = ["packages"]
 omit = ["**/tests/*", "**/__init__.py"]
 
 [tool.coverage.report]
-fail_under = 50
+fail_under = 70
 exclude_lines = [
     "pragma: no cover",
     "if TYPE_CHECKING:",

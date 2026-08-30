@@ -15,25 +15,32 @@
   const simulationId = $derived(data.sim.id);
 
   function statusFromSnapshot(): JobStatusResponse {
-    return (
-      data.status ?? {
-        app_job_id: data.sim.id,
-        compute_job_id: data.sim.computeJobId ?? "",
-        status: data.sim.status,
-        details: data.sim.details,
-        step: data.sim.step,
-        step_index: data.sim.stepIndex,
-        total_steps: data.sim.totalSteps,
-        calculation: data.sim.calculation as JobStatusResponse["calculation"],
-        travel_times: data.sim.travelTimes as JobStatusResponse["travel_times"],
-        result_bucket: data.sim.resultBucket,
-        result_key: data.sim.resultKey,
-        error: data.sim.error,
-        finished_at: data.sim.finishedAt?.toISOString() ?? null,
-        artifacts_available: data.sim.artifactsAvailable,
-      }
-    );
+    return {
+      app_job_id: data.sim.id,
+      compute_job_id: data.sim.computeJobId ?? "",
+      status: data.sim.status,
+      details: data.sim.details,
+      step: data.sim.step,
+      step_index: data.sim.stepIndex,
+      total_steps: data.sim.totalSteps,
+      calculation: data.sim.calculation as JobStatusResponse["calculation"],
+      travel_times: data.sim.travelTimes as JobStatusResponse["travel_times"],
+      error: data.sim.error,
+      finished_at: data.sim.finishedAt?.toISOString() ?? null,
+      artifacts: data.sim.artifacts,
+    };
   }
+
+  const ARTIFACT_LABEL: Record<string, string> = {
+    max_height_map: "Mapa de altura máxima (PDF)",
+    arrival_time_map: "Mapa de tiempos de arribo (PDF)",
+    mareogram: "Mareograma (SVG)",
+    calculation: "Parámetros de la fuente (JSON)",
+    travel_times_json: "Tiempos de arribo (JSON)",
+    travel_times_csv: "Tiempos de arribo (CSV)",
+    input: "Parámetros de entrada (JSON)",
+    runtime: "Entorno de ejecución (JSON)",
+  };
 
   function isTerminal(status: string): boolean {
     return (
@@ -85,7 +92,7 @@
           void invalidateAll();
         }
       } catch {
-        /* ignore malformed frames */
+        // Keep the stream open when a backend frame is not JSON.
       }
     };
     es.onerror = () => es.close();
@@ -155,10 +162,22 @@
       </div>
     {/if}
 
-    {#if live.status === "completed" && live.artifacts_available}
-      <Alert tone="success" title="Artefactos listos">
-        Los resultados estructurados y mapas fueron generados por el backend.
-      </Alert>
+    {#if live.status === "completed" && live.artifacts.length > 0}
+      <div class="rounded-xl border border-neutral-200 bg-white p-6">
+        <h2 class="mb-3 text-lg font-semibold text-neutral-900">Resultados</h2>
+        <ul class="space-y-2">
+          {#each live.artifacts as name (name)}
+            <li>
+              <a
+                class="text-brand-600 hover:underline"
+                href="/simulations/{simulationId}/artifacts/{name}"
+              >
+                {ARTIFACT_LABEL[name] ?? name}
+              </a>
+            </li>
+          {/each}
+        </ul>
+      </div>
     {/if}
   </div>
 

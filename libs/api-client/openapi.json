@@ -223,12 +223,132 @@
         }
       }
     },
+    "/api/v1/jobs/{app_job_id}/artifacts": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "List Artifacts",
+        "operationId": "list_artifacts_api_v1_jobs__app_job_id__artifacts_get",
+        "parameters": [
+          {
+            "name": "app_job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "App Job Id"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactList"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/jobs/{app_job_id}/artifacts/{name}": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Get Artifact",
+        "description": "Redirect the client to a short-lived MinIO URL.",
+        "operationId": "get_artifact_api_v1_jobs__app_job_id__artifacts__name__get",
+        "parameters": [
+          {
+            "name": "app_job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "App Job Id"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "307": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/jobs/{app_job_id}/events": {
       "get": {
         "tags": [
           "jobs"
         ],
         "summary": "Job Events",
+        "description": "Stream job state changes from the job's Postgres notification channel.",
         "operationId": "job_events_api_v1_jobs__app_job_id__events_get",
         "parameters": [
           {
@@ -282,6 +402,50 @@
   },
   "components": {
     "schemas": {
+      "ArtifactList": {
+        "properties": {
+          "app_job_id": {
+            "type": "string",
+            "title": "App Job Id"
+          },
+          "artifacts": {
+            "items": {
+              "$ref": "#/components/schemas/ArtifactRef"
+            },
+            "type": "array",
+            "title": "Artifacts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "app_job_id",
+          "artifacts"
+        ],
+        "title": "ArtifactList"
+      },
+      "ArtifactRef": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "filename",
+          "content_type"
+        ],
+        "title": "ArtifactRef"
+      },
       "CalculationPreview": {
         "properties": {
           "calculation": {
@@ -671,10 +835,13 @@
             ],
             "title": "Finished At"
           },
-          "artifacts_available": {
-            "type": "boolean",
-            "title": "Artifacts Available",
-            "default": false
+          "artifacts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Artifacts",
+            "default": []
           }
         },
         "type": "object",

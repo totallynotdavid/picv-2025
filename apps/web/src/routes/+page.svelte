@@ -1,2 +1,2 @@
-<!-- The server load redirects before this route renders. -->
+<!-- The server redirects this route. -->
 <p>Redirigiendo…</p>

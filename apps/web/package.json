@@ -27,7 +27,6 @@
   },
   "devDependencies": {
     "@better-auth/drizzle-adapter": "~1.6.23",
-    "@libsql/client": "^0.17.4",
     "@sveltejs/adapter-auto": "^7.0.1",
     "@sveltejs/adapter-node": "^5.5.7",
     "@sveltejs/kit": "^2.69.1",
@@ -42,6 +41,7 @@
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "mdsvex": "^0.12.7",
+    "postgres": "^3.4.7",
     "svelte": "^5.56.4",
     "svelte-check": "^4.7.2",
     "tailwindcss": "^4.3.2",

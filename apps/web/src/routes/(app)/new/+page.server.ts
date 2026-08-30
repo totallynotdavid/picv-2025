@@ -28,7 +28,6 @@ export const actions: Actions = {
       id: appJobId,
       userId: user.id,
       params: input,
-      status: "pending_dispatch",
     });
 
     const client = backend(fetch);

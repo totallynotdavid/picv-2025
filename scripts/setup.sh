@@ -38,7 +38,10 @@ Options:
   --skip-gmt-source  Do not build GMT from source if apt GMT is too old.
   --skip-ttt         Do not install ttt_client.
   --skip-ifx         Do not install Intel Fortran Essentials.
-  --skip-tools       Do not compile fault_plane/deform/tsunami.
+  --skip-tools       Do not compile fault_plane/deform/tsunami. These
+                     legacy binaries are used only by the parity suite
+                     (mise run test-parity); the pipeline itself is pure
+                     Python and does not need them.
   --tools-dir DIR    Directory for compiled model executables.
   -h, --help         Show this help.
 

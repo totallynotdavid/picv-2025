@@ -5,7 +5,7 @@ import { getSimulation } from "$lib/server/simulations";
 
 import type { RequestHandler } from "./$types";
 
-/** Proxy backend progress only after the simulation owner is verified. */
+/** Check ownership before proxying the compute progress stream. */
 export const GET: RequestHandler = async ({ params, locals, fetch }) => {
   if (!locals.user) error(401);
   const sim = await getSimulation(locals.user.id, params.id);
