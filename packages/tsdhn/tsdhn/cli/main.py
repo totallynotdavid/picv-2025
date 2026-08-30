@@ -221,13 +221,13 @@ def run(
         except Exception as e:
             progress.stop()
             console.print(f"[red]Simulation failed:[/red] {e}")
-            console.print(f"Inspect run directory: [bold]{work_dir}[/bold]")
+            print(f"Inspect run directory: {work_dir}")
             raise typer.Exit(code=1) from e
 
     console.print(_calculation_table(result.calculation.model_dump()))
     console.print("[green]Simulation complete.[/green]")
-    for artifact in result.bundle.artifacts:
-        console.print(f"{artifact.name}: [bold]{artifact.path}[/bold]")
+    for output in result.outputs.files:
+        console.print(f"{output.name}: [bold]{output.path}[/bold]")
 
 
 def main() -> None:

@@ -14,7 +14,7 @@ def generate_ttt_map(working_dir: Path) -> None:
     projection = "M16c"
     frame_parameters = ["WsNe", "xa20f10", "ya20f10"]
 
-    # GMT binary grid suffixes: cortado.i2 is signed short, ttt.b is binary float.
+    # These suffixes tell GMT how to decode the legacy binary grids.
     grd_filename = "cortado.i2"
     grd_params = "=bs"
     tttb_filename = "ttt.b"
@@ -59,7 +59,7 @@ def generate_ttt_map(working_dir: Path) -> None:
             shorelines="0.5,30",
         )
 
-        # Travel-time isolines are annotated in hours to match the legacy TTT map.
+        # The legacy map labels travel-time isolines in hours.
         fig.grdcontour(
             grid=f"{tttb_file}{tttb_params}",
             region=region,

@@ -1,45 +1,4 @@
-"""model/tsunami1.for -> Python port (linear shallow-water propagation).
-
-This is the Python port of the legacy `tsunami` executable: an explicit
-finite-difference integration of the linear shallow-water equations in
-spherical coordinates over the full IA=2461 x JA=2056 Pacific grid, KE=33602 steps
-of DT=3 s (~28 h simulated). Per-step structure is MASS (continuity) ->
-BOUT (open-boundary radiation) -> MMNT (momentum, no friction) -> CHAN
-(time-level rotation), with tide-gauge sampling and the running maximum
-taken every KD=20 steps.
-
-tsunami1.for has no IMPLICIT DOUBLE PRECISION -- everything is default
-REAL*4 -- so this module computes in np.float32 throughout, same as
-tsdhn.deform. The per-step flush-to-zero (|value| < 1e-5 -> 0.0,
-tsunami1.for:313/334/344) is part of the model, replicated exactly.
-
-Dead code in tsunami1.for, verified against the source and deliberately
-not ported:
-- TMAX and its TMX/ZMX arrays: the zfolder/tmax_a.grd write is commented
-  out (lines 119-122) and nothing else reads them.
-- MOVIE (frame snapshots every KA steps): its call is commented out
-  (line 109).
-- JNQ (nested-grid boundary interpolation): never called from the main
-  program -- this build propagates on grid A only.
-- The tide-gauge location console check and the itime wall-clock report:
-  console-only output.
-
-The only live outputs are zfolder/green.dat (gauge mareograms,
-WRITE(4,'(F7.1,100F7.3)')) and zfolder/zmax_a.grd (running maximum
-elevation, FORMAT(4000F8.3)); both formats are replicated field-for-field
-because downstream consumers (render/maxola.py, render/ttt_max.py, and
-the golden-pipeline fingerprints) read these files.
-
-Two time levels are kept as swapped buffer pairs instead of CHAN's full
-copy. That is semantically identical because every level-2 cell either
-gets fully rewritten each step (MASS/BOUT/MMNT cover their whole update
-regions, writing 0.0 in their dry/else branches) or is never written
-after the initial zeroing (the I=1/J=1 borders, M's I=IA column, N's
-J=JA row) and therefore stays 0.0 in both buffers forever. The one place
-Fortran reads level 2 *before* it is rewritten -- BOUT's M(:,:,2)/N(:,:,2)
--- sees values CHAN just made equal to level 1, so the port reads the
-level-1 buffers there.
-"""
+"""Linear shallow-water propagation port of `model/tsunami1.for`."""
 
 import logging
 from collections.abc import Callable
@@ -54,51 +13,40 @@ from tsdhn.utils.file_utils import atomic_write
 
 logger = logging.getLogger(__name__)
 
-# numba ships no type stubs; prange is re-cast so the kernels below stay
-# fully typed. numba resolves the aliased global back to numba.prange when
-# compiling, so parallelization is unaffected.
+# Numba has no type stubs for prange, so keep the alias typed for mypy.
 prange = cast("Callable[[int, int], range]", numba.prange)
 
 
 def _jit[F: Callable[..., None]](fn: F) -> F:
-    # No fastmath: the kernels must keep IEEE float32 semantics in written
-    # order to stay faithful to the REAL*4 Fortran arithmetic. parallel=True
-    # only distributes independent per-cell writes (no reductions), so the
-    # result is identical to the serial loop.
+    # Keep IEEE float32 evaluation order. Parallel writes are independent.
     return cast("F", numba.njit(cache=True, parallel=True)(fn))
 
 
-# tsunami1.for:14-20 PARAMETER block (all default REAL*4 / INTEGER).
 IA = 2461
 JA = 2056
-_DELTA = np.float32(240.0) / np.float32(3600.0)  # grid resolution (deg)
-_DT = np.float32(3.0)  # time step (s)
-KE = 33602  # total computation steps
-KD = 20  # mareogram sampling ratio
-NG = 17  # virtual tide gauges
-_RT = np.float32(6.37e6)  # Earth radius (m)
-# tsunami1.for:45 -- southern latitude edge of grid A (deg).
+_DELTA = np.float32(240.0) / np.float32(3600.0)
+_DT = np.float32(3.0)
+KE = 33602
+KD = 20
+NG = 17
+_RT = np.float32(6.37e6)
 _BLATA = np.float32(-76.006)
-# tsunami1.for:42/252 -- PI=4.0*ATAN(1.0), computed not literal, so this
-# matches the exact float32 rounding the Fortran expression produces.
+# Compute pi through float32 atan to match the legacy arithmetic.
 _PI = np.float32(4.0) * np.arctan(np.float32(1.0))
-_DA = _PI * _DELTA / np.float32(180.0)  # tsunami1.for:48 -- grid step (rad)
-_GG = np.float32(9.8)  # tsunami1.for:253
-# tsunami1.for:313/334/344 -- small-value flush threshold.
+_DA = _PI * _DELTA / np.float32(180.0)
+_GG = np.float32(9.8)
 _FLUSH = np.float32(1.0e-5)
 
 
 def _read_xyo_dat(path: Path) -> tuple[int, int, int, int]:
-    # tsunami1.for:37 -- READ(5,*)IDS,IDE,JDS,JDE consumes only 4 tokens;
-    # fault_plane also writes IA/JA as harmless trailing padding.
+    # The legacy reader consumes four tokens; trailing grid dimensions are
+    # padding written by the fault-plane step.
     ids, ide, jds, jde = path.read_text().split()[:4]
     return int(float(ids)), int(float(ide)), int(float(jds)), int(float(jde))
 
 
 def _read_tidal_dat(path: Path) -> tuple[np.ndarray, np.ndarray]:
-    # tsunami1.for:56-58 -- READ(3,*)PNAME(IN),IP(IN),JP(IN). PNAME is
-    # CHARACTER*1 and never used beyond the console check; only the grid
-    # indices matter.
+    # The solver uses gauge indices. Gauge names are metadata only.
     ip = np.empty(NG, dtype=np.int64)
     jp = np.empty(NG, dtype=np.int64)
     lines = [line for line in path.read_text().splitlines() if line.strip()]
@@ -110,8 +58,7 @@ def _read_tidal_dat(path: Path) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _read_grid_a(path: Path) -> np.ndarray:
-    # tsunami1.for:154-167 (INPUTA): bathymetry, one row per record, then
-    # the shallow-water floor -- depths in (0, 10) m are raised to 10 m.
+    # Preserve the legacy shallow-water floor for positive depths below 10 m.
     grid = np.loadtxt(path, dtype=np.float32)
     if grid.shape != (IA, JA):
         raise ValueError(f"Unexpected grid_a.grd shape: {grid.shape}")
@@ -120,9 +67,7 @@ def _read_grid_a(path: Path) -> np.ndarray:
 
 
 def _read_deform_a(path: Path, ids: int, ide: int, jds: int, jde: int) -> np.ndarray:
-    # tsunami1.for:171-180 (DEFORMA): the initial elevation window. Written
-    # by tsdhn.deform.write_deform_grid (F9.3-equivalent fixed width, always
-    # whitespace-separable for |value| < 1000).
+    # The file contains the initial elevation for the requested grid window.
     values = np.array(path.read_text().split(), dtype=np.float32)
     rows = ide - ids + 1
     cols = jde - jds + 1
@@ -135,7 +80,7 @@ def _read_deform_a(path: Path, ids: int, ide: int, jds: int, jde: int) -> np.nda
 
 
 def _hmn(h: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """tsunami1.for:277-298 (HMN): depths at the staggered discharge nodes.
+    """Return depths at the staggered discharge nodes.
 
     HM averages along I (last row keeps H itself), HN along J (last column
     keeps H itself).
@@ -153,12 +98,10 @@ def _hmn(h: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 def _prelim(
     hm: np.ndarray, hn: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """tsunami1.for:248-272 (PRELIM): latitude-dependent mass factors RX/CJ
-    and the momentum factor grids XX/YY.
+    """Build latitude and momentum factors for the solver.
 
-    RZ/RN advance by repeated float32 addition of DA in the Fortran loop --
-    replicated as a scalar float32 walk (not linspace) so the accumulated
-    rounding matches.
+    RZ and RN advance by repeated float32 addition of DA. The scalar walk
+    preserves the accumulated rounding of the reference solver.
     """
     ja = hm.shape[1]
     rx = np.empty(ja, dtype=np.float32)
@@ -185,9 +128,7 @@ def _mass(
     rx: np.ndarray,
     cj: np.ndarray,
 ) -> None:
-    """tsunami1.for:302-319 (MASS): continuity over the interior (I,J >= 2,
-    1-indexed), with the |Z|<1e-5 flush; dry cells are forced to zero. The
-    I=1/J=1 borders of z2 are never written (they stay 0.0 from init)."""
+    """Apply continuity to wet interior cells and flush small elevations."""
     ia, ja = h.shape
     zero = np.float32(0.0)
     for i in prange(1, ia):
@@ -212,13 +153,10 @@ def _bout(
     n_prev: np.ndarray,
     h: np.ndarray,
 ) -> None:
-    """tsunami1.for:355-390 (BOUT): open-boundary radiation on the four grid
-    edges (rows J=2/JA then columns I=2/IA, in that order -- the corner
-    cells written by both passes take the second write, like Fortran).
+    """Apply open-boundary radiation on the four grid edges.
 
-    Fortran reads M/N level 2 here, but CHAN made level 2 equal to level 1
-    at the end of the previous step, so the buffer-swap port passes the
-    level-1 (previous-step) momentum as m_prev/n_prev.
+    The edge passes run in a fixed order, so the second pass owns a corner.
+    The buffer-swap port passes previous-step momentum explicitly.
     """
     ia, ja = h.shape
     half = np.float32(0.5)
@@ -266,9 +204,7 @@ def _mmnt(
     xx: np.ndarray,
     yy: np.ndarray,
 ) -> None:
-    """tsunami1.for:323-351 (MMNT): momentum from the *new* elevation; a
-    discharge needs both flanking cells wet, else it is zeroed. M's last
-    row (I=IA) and N's last column (J=JA) are never written (stay 0.0)."""
+    """Update momentum from the new elevation across wet cells."""
     ia, ja = h.shape
     zero = np.float32(0.0)
     for i in prange(1, ia - 1):
@@ -292,8 +228,7 @@ def _mmnt(
 
 
 def _write_green_dat(path: Path, rows: list[tuple[float, np.ndarray]]) -> None:
-    # tsunami1.for:100 -- WRITE(4,'(F7.1,100F7.3)'): fixed 7-char fields,
-    # no separators beyond the field widths themselves.
+    # Reports read the legacy fixed-width gauge format.
     with atomic_write(path) as tmp_path, tmp_path.open("w") as handle:
         for minutes, gauges in rows:
             handle.write(
@@ -302,14 +237,12 @@ def _write_green_dat(path: Path, rows: list[tuple[float, np.ndarray]]) -> None:
 
 
 def _write_zmax_a(path: Path, zmxa: np.ndarray) -> None:
-    # tsunami1.for:124-130 -- FORMAT(4000F8.3): fixed 8-char fields, one
-    # grid row per line (same savetxt pattern as deform.write_deform_grid).
+    # Reports read the legacy fixed-width maximum-height grid.
     with atomic_write(path) as tmp_path:
         np.savetxt(tmp_path, zmxa, fmt="%8.3f", delimiter="")
 
 
-# Checkpoint often enough to bound restart work without writing the large
-# solver state on every step.
+# Checkpoints contain every time level needed to resume after a worker restart.
 _CHECKPOINT_INTERVAL = 2000
 
 
@@ -352,7 +285,6 @@ def _write_checkpoint(
         )
 
 
-# A resumed run's state, or None if there is no usable checkpoint on disk.
 type _TsunamiState = tuple[
     int,  # k, the last fully-completed step
     np.ndarray,  # z1
@@ -420,10 +352,7 @@ def run_tsunami(working_dir: Path) -> None:
         logger.info("resuming tsunami run from step %d of %d", start_k, KE)
     else:
         start_k = 0
-        # CEROS (tsunami1.for:493-507) zeroes both time levels; the
-        # COMMON-block ZMXA starts zeroed by static storage. The I=1/J=1
-        # borders (0-indexed row/col 0) are never written by any live
-        # subroutine afterward.
+        # The first Fortran row and column remain outside the interior update.
         z1 = np.zeros((IA, JA), dtype=np.float32)
         z2 = np.zeros((IA, JA), dtype=np.float32)
         m1 = np.zeros((IA, JA), dtype=np.float32)
@@ -432,7 +361,7 @@ def run_tsunami(working_dir: Path) -> None:
         n2 = np.zeros((IA, JA), dtype=np.float32)
         zmxa = np.zeros((IA, JA), dtype=np.float32)
 
-        # DEFORMA: initial condition into level 1 (1-indexed IDS..IDE, JDS..JDE).
+        # Deformation occupies only the one-based window written by fault_plane.
         z1[ids - 1 : ide, jds - 1 : jde] = _read_deform_a(
             working_dir / "deform_a.grd", ids, ide, jds, jde
         )
@@ -451,13 +380,12 @@ def run_tsunami(working_dir: Path) -> None:
         _bout(z2, m1, n1, h)
         _mmnt(z2, m1, m2, n1, n2, h, xx, yy)
 
-        # Gauge sampling + ZMAX (tsunami1.for:96-103): both only every KD
-        # steps -- ZMXA is the max over *sampled* fields, not every step.
+        # The maximum grid is sampled with gauges, not at every solver step.
         if kk % KD == 0:
             gauge_rows.append((kk * float(_DT) / 60.0, z2[gauge_i, gauge_j].copy()))
             np.maximum(zmxa, z2, out=zmxa)
 
-        # CHAN (tsunami1.for:480-491): rotate time levels via buffer swap.
+        # Boundary radiation has already read the previous momentum buffers.
         z1, z2 = z2, z1
         m1, m2 = m2, m1
         n1, n2 = n2, n1
