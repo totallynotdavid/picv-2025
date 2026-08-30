@@ -1,8 +1,8 @@
 VER=ifort
 com=-parallel
 
-deform: deform.for
-	$(VER) -O deform.for -o deform $(com)
+deform: def_oka.f
+	$(VER) -O def_oka.f -o deform $(com)
 espejo: espejo.f
 	$(VER) -O espejo.f -o espejo $(com)
 fault_plane: fault_plane.f90
