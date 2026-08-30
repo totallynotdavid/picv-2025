@@ -113,10 +113,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get Output
-         * @description Redirect the client to a short-lived MinIO URL.
-         */
+        /** Get Output */
         get: operations["get_output_api_v1_jobs__simulation_id__outputs__name__get"];
         put?: never;
         post?: never;

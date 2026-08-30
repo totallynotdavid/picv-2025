@@ -287,7 +287,6 @@
           "jobs"
         ],
         "summary": "Get Output",
-        "description": "Redirect the client to a short-lived MinIO URL.",
         "operationId": "get_output_api_v1_jobs__simulation_id__outputs__name__get",
         "parameters": [
           {

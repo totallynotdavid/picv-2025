@@ -8,11 +8,11 @@ only in server code; importing it into browser code could expose the token.
 
 ## Files
 
-| File | Purpose |
-| --- | --- |
-| `openapi.json` | OpenAPI definition exported from FastAPI |
-| `src/generated/schema.ts` | Generated TypeScript paths and schemas |
-| `src/index.ts` | Small `openapi-fetch` wrapper that adds compute API authentication |
+| File                      | Purpose                                                            |
+| ------------------------- | ------------------------------------------------------------------ |
+| `openapi.json`            | OpenAPI definition exported from FastAPI                           |
+| `src/generated/schema.ts` | Generated TypeScript paths and schemas                             |
+| `src/index.ts`            | Small `openapi-fetch` wrapper that adds compute API authentication |
 
 ## Usage
 
