@@ -7,7 +7,7 @@ from tsdhn.utils.file_utils import make_executable
 from tsdhn_parity.adapters.fortran import FortranBinaryAdapter, read_fixed_width_grid
 from tsdhn_parity.cases import Case
 
-# Use the same copy, execute, and read-back contract as a legacy binary.
+# Exercise the adapter's copy, execute, and read-back contract.
 FIXTURE_PROGRAM = """#!/bin/sh
 value=$(cat input.txt)
 echo $((value * 2)) > output.txt

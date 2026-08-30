@@ -1,7 +1,7 @@
 [project]
-name = "tsdhn"
+name = "tsdhn-parity"
 version = "0.0.1"
-description = "TSDHN CLI for researchers and simulation engine"
+description = "Checkpoint-trace parity testing between legacy MATLAB/Fortran units and their tsdhn Python ports"
 requires-python = ">=3.14"
 readme = "readme.md"
 license = { text = "MIT" }
@@ -9,24 +9,15 @@ authors = [
     { name = "David Duran", email = "dadch1404@gmail.com" },
 ]
 dependencies = [
-    "pydantic==2.13.4",
-    "scipy==1.18.0",
+    "tsdhn",
     "numpy==2.4.6",
-    "numba==0.66.0",
-    "pygmt==0.19.0",
-    "pyyaml==6.0.3",
-    "typer==0.26.8",
-    "rich==15.0.0",
-    "xarray==2026.4.0",
+    "pytest==9.1.1",
 ]
-
-[project.scripts]
-tsdhn = "tsdhn.cli.main:main"
 
 [build-system]
 requires = ["uv_build==0.11.28"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]
-module-name = "tsdhn"
+module-name = "tsdhn_parity"
 module-root = ""

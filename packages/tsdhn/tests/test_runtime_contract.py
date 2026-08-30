@@ -1,5 +1,6 @@
 import subprocess
 from pathlib import Path
+from typing import Self
 
 import numpy as np
 import pygmt
@@ -62,9 +63,7 @@ def test_runtime_resolves_the_model_dir_from_the_environment(
 
 
 def test_runtime_reports_external_tool_capabilities(tmp_path: Path) -> None:
-    """gmt and ttt_client are resolved from PATH. There is no tools
-    directory of prebuilt Fortran binaries any more -- every pipeline step
-    is a Python function."""
+    """Report GMT and ttt_client when they are resolved from PATH."""
     model_dir = _create_model_dir(tmp_path)
 
     runtime = RuntimeContext.resolve(model_dir=model_dir)
@@ -168,6 +167,7 @@ def test_ttt_inverso_uses_shared_meca_spec_for_epicenter(
         encoding="utf-8",
     )
     commands: list[tuple[list[str], Path]] = []
+    module_calls: list[tuple[str, list[str]]] = []
 
     def fake_resolve(executable: str) -> Path:
         return Path("/tools") / executable
@@ -183,8 +183,19 @@ def test_ttt_inverso_uses_shared_meca_spec_for_epicenter(
         commands.append((args, cwd))
         return subprocess.CompletedProcess(args, 0)
 
+    class FakeSession:
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *exc_info: object) -> None:
+            return None
+
+        def call_module(self, module: str, args: list[str]) -> None:
+            module_calls.append((module, args))
+
     monkeypatch.setattr(ttt_inverso, "resolve", fake_resolve)
     monkeypatch.setattr("tsdhn.render.ttt_inverso.subprocess.run", fake_run)
+    monkeypatch.setattr(ttt_inverso, "Session", FakeSession)
 
     ttt_inverso.ttt_inverso_python(working_dir)
 
@@ -199,19 +210,9 @@ def test_ttt_inverso_uses_shared_meca_spec_for_epicenter(
             ],
             working_dir,
         ),
-        (
-            [
-                "/tools/gmt",
-                "grdmath",
-                "ttt.b=bf",
-                "1.0",
-                "MUL",
-                "=",
-                "ttt.b=bf",
-            ],
-            working_dir,
-        ),
     ]
+    grid_arg = f"{working_dir / 'ttt.b'}=bf"
+    assert module_calls == [("grdmath", [grid_arg, "1.0", "MUL", "=", grid_arg])]
 
 
 def test_ttt_inverso_keeps_full_meca_dat_validation(tmp_path: Path) -> None:

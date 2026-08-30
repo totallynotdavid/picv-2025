@@ -39,7 +39,6 @@ class ComparisonResult:
 
     @property
     def first_divergence(self) -> CheckpointDiff | None:
-        """Return the first checkpoint that differs."""
         return next((diff for diff in self.diffs if not diff.ok), None)
 
     @property

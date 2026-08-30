@@ -12,10 +12,7 @@ from api.core.db import close_pool, get_pool
 from api.core.settings import LOG_LEVEL
 from api.routes import get_calculator, ops_router, router
 
-# Logs go to stdout, at INFO by default. They used to go to a file inside
-# the container at DEBUG, which made them invisible to `docker logs`, grew
-# without bound on the container filesystem, and wrote the raw tracebacks
-# that compute.jobs.error is careful to redact into a file nobody rotates.
+# Send logs to stdout so container runtimes can collect them.
 logging.basicConfig(
     level=LOG_LEVEL,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -26,8 +23,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     get_calculator()
-    # Warm the pool without waiting: the API still boots and serves
-    # /health (reporting degraded) when Postgres is not up yet.
+    # Open the pool without waiting for Postgres.
     get_pool()
     logger.info("TSDHN API ready")
     try:
@@ -63,7 +59,6 @@ app = create_app()
 
 
 def start_app() -> None:
-    # Containers set APP_HOST=0.0.0.0. Local runs stay on loopback by default.
     uvicorn.run(
         app,
         host=os.environ.get("APP_HOST", "127.0.0.1"),
