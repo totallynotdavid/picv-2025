@@ -1,6 +1,5 @@
 """Database connections for API reads, workers, and job notifications."""
 
-import logging
 import threading
 import uuid
 from collections.abc import Iterator

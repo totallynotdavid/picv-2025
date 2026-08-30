@@ -155,7 +155,7 @@ def test_ttt_b_fingerprint(golden_result: SimulationResult) -> None:
         check=True,
     )
     # grdinfo -C always prefixes the row with the grid name/path.
-    _name, *fields = result.stdout.strip().split("\t")
+    fields = result.stdout.strip().split("\t")[1:]
     (
         x_min,
         x_max,
