@@ -2,12 +2,8 @@ CREATE TABLE "simulation" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"user_id" text NOT NULL,
 	"params" jsonb NOT NULL,
-	"dispatch_status" text DEFAULT 'pending' NOT NULL,
-	"dispatch_error" text,
-	"compute_backend" text,
-	"compute_job_id" text,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"dispatched_at" timestamp with time zone
+	"submission_error" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "account" (
@@ -62,7 +58,6 @@ ALTER TABLE "simulation" ADD CONSTRAINT "simulation_user_id_user_id_fk" FOREIGN 
 ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "simulation_user_created_at_idx" ON "simulation" USING btree ("user_id","created_at" DESC NULLS LAST);--> statement-breakpoint
-CREATE INDEX "simulation_dispatch_status_idx" ON "simulation" USING btree ("dispatch_status");--> statement-breakpoint
 CREATE INDEX "account_userId_idx" ON "account" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "session_userId_idx" ON "session" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "verification_identifier_idx" ON "verification" USING btree ("identifier");

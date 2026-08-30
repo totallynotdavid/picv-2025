@@ -26,27 +26,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "dispatch_status": {
-          "name": "dispatch_status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "dispatch_error": {
-          "name": "dispatch_error",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "compute_backend": {
-          "name": "compute_backend",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "compute_job_id": {
-          "name": "compute_job_id",
+        "submission_error": {
+          "name": "submission_error",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -57,12 +38,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "dispatched_at": {
-          "name": "dispatched_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -79,21 +54,6 @@
               "expression": "created_at",
               "isExpression": false,
               "asc": false,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "simulation_dispatch_status_idx": {
-          "name": "simulation_dispatch_status_idx",
-          "columns": [
-            {
-              "expression": "dispatch_status",
-              "isExpression": false,
-              "asc": true,
               "nulls": "last"
             }
           ],
