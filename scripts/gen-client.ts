@@ -1,7 +1,4 @@
 #!/usr/bin/env bun
-/**
- * CI fails when generated OpenAPI types drift from the FastAPI contract.
- */
 import { $ } from 'bun';
 
 const SCHEMA_JSON = 'libs/api-client/openapi.json';

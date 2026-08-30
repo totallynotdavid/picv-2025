@@ -35,7 +35,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 TESTS_DIR = REPO_ROOT / "packages" / "tsdhn" / "tests"
 PARITY_DIR = TESTS_DIR / "parity"
 
-# MATLAB image used for fixture capture.
 MATLAB_IMAGE = "mathworks/matlab:r2026a"
 MATLAB_CONFIG_VOLUME = "matlab-config"
 MATLAB_CONFIG_MOUNT = "/home/matlab/.matlab/MATLAB_R2026a"
@@ -108,11 +107,8 @@ def _select_cases(unit_dir: Path, only_case_id: str | None) -> list[Case]:
 
 
 def _import_unit_spec(unit: str) -> ModuleType:
-    # Imported as a real submodule of the same `parity` package pytest
-    # collects (packages/tsdhn/tests/parity/__init__.py), not loaded as a
-    # standalone file, so relative imports inside a unit's spec.py (e.g.
-    # tsunami's `from ..conftest import MODEL_DIR`) resolve the same way
-    # they do under pytest.
+    # Import through the parity package so relative imports work as they do
+    # under pytest.
     sys.path.insert(0, str(TESTS_DIR))
     try:
         return importlib.import_module(f"parity.{unit}.spec")
