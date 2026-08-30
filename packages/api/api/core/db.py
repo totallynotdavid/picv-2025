@@ -28,8 +28,6 @@ __all__ = [
     "pooled",
 ]
 
-logger = logging.getLogger(__name__)
-
 JobRow = dict[str, Any]
 CONNECT_TIMEOUT = 2
 
