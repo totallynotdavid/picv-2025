@@ -13,7 +13,10 @@ case "${1:-}" in
     *) echo "usage: $0 [--coverage]" >&2; exit 2 ;;
 esac
 
-mise run db:start
+# Skip database startup if COMPUTE_DATABASE_URL is set (e.g., by CI with service container)
+if [ -z "${COMPUTE_DATABASE_URL:-}" ]; then
+    mise run db:start
+fi
 
 admin_url="$(
     uv run python -m scripts.database create \
