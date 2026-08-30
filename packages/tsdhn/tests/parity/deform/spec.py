@@ -35,7 +35,7 @@ CASES = [
         params={
             "I0": 1180,
             "J0": 1988,
-            "D0": 11.965752308065987,  # slip (m), fault_plane.f90's u=4.0e10
+            "D0": 11.965752308065987,  # slip (m), using the legacy rigidity
             "L0": 575439.9373371573,  # length (m)
             "W0": 144543.97707459278,  # width (m)
             "TH": 247.0,  # strike / azimuth (deg)
@@ -62,9 +62,9 @@ CASES = [
     ),
 ]
 
-# Padding fault_plane.f90 also writes to xyo.dat; def_oka.f never reads them.
+# The deformation step ignores the grid dimensions after the requested window.
 _UNUSED_PARAMS = ("IA", "JA")
-_READ_GRID = read_fixed_width_grid(9)  # model/def_oka.f: FORMAT(4000F9.3)
+_READ_GRID = read_fixed_width_grid(9)  # Legacy deformation grids use F9.3 fields.
 
 
 def _prepare(case: Case, working_dir: Path) -> None:

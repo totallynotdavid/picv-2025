@@ -2,6 +2,7 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
+import pygmt
 import pytest
 from pygmt.enums import GridRegistration, GridType
 
@@ -219,6 +220,37 @@ def test_ttt_inverso_keeps_full_meca_dat_validation(tmp_path: Path) -> None:
     (tmp_path / "meca.dat").write_text("210.25 -9.50\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="does not contain exactly 10 values"):
+        ttt_inverso.ttt_inverso_python(working_dir)
+
+
+def test_ttt_inverso_surfaces_a_grdmath_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    working_dir = tmp_path / "ttt"
+    working_dir.mkdir()
+    (tmp_path / "meca.dat").write_text(
+        "210.25 -9.50 10 20 30 40 7.5 210 -9 event\n",
+        encoding="utf-8",
+    )
+
+    class BrokenSession:
+        def __enter__(self) -> BrokenSession:
+            return self
+
+        def __exit__(self, *exc_info: object) -> None:
+            return None
+
+        def call_module(self, module: str, args: list[str]) -> None:
+            raise pygmt.exceptions.GMTError("grdmath failed")
+
+    monkeypatch.setattr(ttt_inverso, "resolve", lambda name: Path("/tools") / name)
+    monkeypatch.setattr(
+        "tsdhn.render.ttt_inverso.subprocess.run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(args, 0),
+    )
+    monkeypatch.setattr(ttt_inverso, "Session", BrokenSession)
+
+    with pytest.raises(pygmt.exceptions.GMTError, match="grdmath failed"):
         ttt_inverso.ttt_inverso_python(working_dir)
 
 

@@ -30,7 +30,6 @@ from tsdhn_parity import (
 
 from ..conftest import MODEL_DIR
 
-# Same scenario as the fault_plane/deform legs and test_numerical_values.py.
 CASES = [
     Case(
         id="alaska_1964",
@@ -45,8 +44,7 @@ CASES = [
     ),
 ]
 
-# model/tsunami1.for: green.dat is WRITE(4,'(F7.1,100F7.3)') -> 7-char
-# columns; zmax_a.grd is FORMAT(4000F8.3) -> 8-char columns.
+# The output files use seven-character and eight-character numeric fields.
 _READERS: dict[str, Callable[[Path], np.ndarray]] = {
     "green.dat": read_fixed_width_grid(7),
     "zmax_a.grd": read_fixed_width_grid(8),
@@ -54,8 +52,7 @@ _READERS: dict[str, Callable[[Path], np.ndarray]] = {
 
 _CHECKPOINTS = ("zfolder/green.dat", "zfolder/zmax_a.grd")
 
-# Chained-input workspaces per scenario, built once and reused by both
-# adapters so legacy and python integrate the exact same initial condition.
+# Build each scenario's initial condition once and reuse it for both adapters.
 _chained: dict[str, Path] = {}
 
 
@@ -82,9 +79,7 @@ def _params_key(params: dict[str, Any]) -> str:
 
 
 def _chained_inputs(params: dict[str, Any]) -> Path:
-    """Runs the Python fault_plane + deform ports once per scenario in a
-    session-lifetime scratch dir; returns the dir holding deform_a.grd +
-    xyo.dat."""
+    """Return the shared fault-plane and deformation inputs for a case."""
     key = _params_key(params)
     if key not in _chained:
         workspace = Path(tempfile.mkdtemp(prefix="tsdhn-parity-tsunami-chain-"))

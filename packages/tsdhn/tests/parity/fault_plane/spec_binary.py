@@ -26,7 +26,6 @@ from tsdhn_parity import (
 
 from ..conftest import MODEL_DIR
 
-# Same scenario as spec.py and test_numerical_values.py's expected_basic.
 CASES = [
     Case(
         id="alaska_1964",

@@ -12,18 +12,16 @@ from tsdhn.utils.geo import (
 def test_calculate_distance_to_coast() -> None:
     coast_points = np.array([[-70.0, -20.0], [-71.0, -21.0]])
     distance = calculate_distance_to_coast(coast_points, -70.5, -20.5)
-    assert isinstance(distance, float)
-    assert distance > 0
+    assert distance == pytest.approx(78.6266867)
 
 
 def test_format_arrival_time() -> None:
     formatted_time = format_arrival_time(14.5, "15")
-    assert isinstance(formatted_time, str)
-    assert ":" in formatted_time
+    assert formatted_time.startswith("14:30 15")
 
     # Arrival formatting rolls into the next day after 24 hours.
     rollover_time = format_arrival_time(25.5, "15")
-    assert rollover_time.split()[0].startswith("01")
+    assert rollover_time.startswith("01:30 16")
 
 
 @pytest.mark.parametrize(

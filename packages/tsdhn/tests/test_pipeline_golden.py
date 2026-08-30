@@ -56,10 +56,10 @@ def _fingerprint_text(path: Path) -> dict[str, float | int]:
     }
 
 
-def test_simulation_produces_expected_artifacts(
+def test_simulation_produces_expected_outputs(
     golden_result: SimulationResult,
 ) -> None:
-    names = {artifact.name for artifact in golden_result.bundle.artifacts}
+    names = {output.name for output in golden_result.outputs.files}
     assert names == {
         "input",
         "runtime",
@@ -73,7 +73,7 @@ def test_simulation_produces_expected_artifacts(
 
 
 def test_pfalla_inp_fingerprint(golden_result: SimulationResult) -> None:
-    fp = _fingerprint_text(golden_result.bundle.root / "pfalla.inp")
+    fp = _fingerprint_text(golden_result.outputs.root / "pfalla.inp")
     # The Python port writes one line. The Fortran reader accepts
     # whitespace-separated fields.
     assert fp["line_count"] == 1
@@ -84,7 +84,7 @@ def test_pfalla_inp_fingerprint(golden_result: SimulationResult) -> None:
 
 
 def test_green_dat_fingerprint(golden_result: SimulationResult) -> None:
-    fp = _fingerprint_text(golden_result.bundle.root / "zfolder" / "green.dat")
+    fp = _fingerprint_text(golden_result.outputs.root / "zfolder" / "green.dat")
     assert fp["line_count"] == 1681
     assert fp["value_count"] == 30258
     assert fp["min"] == pytest.approx(-0.22, rel=REL_TOL)
@@ -93,7 +93,7 @@ def test_green_dat_fingerprint(golden_result: SimulationResult) -> None:
 
 
 def test_zmax_a_grd_fingerprint(golden_result: SimulationResult) -> None:
-    fp = _fingerprint_text(golden_result.bundle.root / "zfolder" / "zmax_a.grd")
+    fp = _fingerprint_text(golden_result.outputs.root / "zfolder" / "zmax_a.grd")
     assert fp["line_count"] == 2461
     assert fp["value_count"] == 5059816
     assert fp["min"] == pytest.approx(0.0, abs=1e-9)
@@ -101,8 +101,34 @@ def test_zmax_a_grd_fingerprint(golden_result: SimulationResult) -> None:
     assert fp["mean"] == pytest.approx(0.03851133361371243, rel=REL_TOL)
 
 
+def test_zmax_a_grd_preserves_spatial_samples(golden_result: SimulationResult) -> None:
+    """Aggregate statistics cannot detect a spatially rearranged grid."""
+    path = golden_result.outputs.root / "zfolder" / "zmax_a.grd"
+    samples = {}
+    wanted = {(1000, 2), (1000, 1000), (1232, 2), (1232, 2000), (2000, 1000)}
+    with path.open() as stream:
+        for row_number, line in enumerate(stream, start=1):
+            if row_number not in {row for row, _column in wanted}:
+                continue
+            values = line.split()
+            for row, column in wanted:
+                if row == row_number:
+                    samples[(row, column)] = float(values[column - 1])
+
+    assert samples == pytest.approx(
+        {
+            (1000, 2): 0.027,
+            (1000, 1000): 0.038,
+            (1232, 2): 0.038,
+            (1232, 2000): 0.220,
+            (2000, 1000): 0.064,
+        },
+        rel=REL_TOL,
+    )
+
+
 def test_green_rev_dat_fingerprint(golden_result: SimulationResult) -> None:
-    fp = _fingerprint_text(golden_result.bundle.root / "zfolder" / "green_rev.dat")
+    fp = _fingerprint_text(golden_result.outputs.root / "zfolder" / "green_rev.dat")
     assert fp["line_count"] == 1681
     assert fp["value_count"] == 6724
     assert fp["min"] == pytest.approx(-0.28353207, rel=REL_TOL)
@@ -111,7 +137,7 @@ def test_green_rev_dat_fingerprint(golden_result: SimulationResult) -> None:
 
 
 def test_ttt_max_dat_fingerprint(golden_result: SimulationResult) -> None:
-    fp = _fingerprint_text(golden_result.bundle.root / "ttt_max.dat")
+    fp = _fingerprint_text(golden_result.outputs.root / "ttt_max.dat")
     assert fp["line_count"] == 17
     assert fp["value_count"] == 34
     assert fp["min"] == pytest.approx(0.06, rel=REL_TOL)
@@ -120,7 +146,7 @@ def test_ttt_max_dat_fingerprint(golden_result: SimulationResult) -> None:
 
 
 def test_ttt_b_fingerprint(golden_result: SimulationResult) -> None:
-    ttt_mundo_dir = golden_result.bundle.root / "ttt_mundo"
+    ttt_mundo_dir = golden_result.outputs.root / "ttt_mundo"
     result = subprocess.run(
         [shutil.which("gmt") or "gmt", "grdinfo", "-C", "-L1", "-L2", "ttt.b=bf"],
         cwd=ttt_mundo_dir,
