@@ -13,7 +13,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def main() -> None:
+def main() -> None:  # pragma: no cover
     if NUMBA_THREADS is not None:
         # Numba ships no type stubs for this call.
         numba.set_num_threads(NUMBA_THREADS)  # type: ignore[no-untyped-call]
@@ -32,5 +32,5 @@ def main() -> None:
         close_pool()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

@@ -183,10 +183,10 @@ def apply_schema(conninfo: str) -> None:
     logger.info("Procrastinate schema applied")
 
 
-def main() -> None:
+def main() -> None:  # pragma: no cover
     logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
     apply_schema(COMPUTE_DATABASE_URL)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

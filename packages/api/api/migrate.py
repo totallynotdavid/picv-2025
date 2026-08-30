@@ -138,5 +138,5 @@ def main() -> None:
     logger.info("compute schema applied; role %s provisioned", APP_DB_ROLE)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()
