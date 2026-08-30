@@ -189,8 +189,10 @@ def plot_mareograma(scale: float, tick_type: str) -> None:
         ".series{fill:none;stroke:#1d4ed8;stroke-width:1.5}</style>"
     )
     elements = [
-        '<svg xmlns="http://www.w3.org/2000/svg" '
-        f'width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        (
+            '<svg xmlns="http://www.w3.org/2000/svg" '
+            f'width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
+        ),
         '<rect width="100%" height="100%" fill="white"/>',
         style,
     ]
