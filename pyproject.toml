@@ -57,7 +57,7 @@ known-first-party = ["tsdhn", "api"]
 "**/tests/**/*.py" = ["S101", "S105", "S106"]  # asserts and dummy tokens are fine in tests
 # S603 is suppressed: every subprocess call uses arguments from
 # validated floats, local Path objects, or frozen dataclass fields.
-"packages/tsdhn/tsdhn/pipeline/types.py" = ["S603"]
+"packages/tsdhn-parity/tsdhn_parity/adapters/fortran.py" = ["S603"]
 "packages/tsdhn/tsdhn/render/ttt_inverso.py" = ["S603"]
 
 [tool.ruff.format]

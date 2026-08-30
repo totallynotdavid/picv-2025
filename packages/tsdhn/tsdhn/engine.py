@@ -8,10 +8,10 @@ from typing import Any
 from tsdhn.calculator import TsunamiCalculator
 from tsdhn.domain import CalculationResponse, EarthquakeInput, TsunamiTravelResponse
 from tsdhn.external import ensure_executables
-from tsdhn.pipeline.types import ProcessingStep, ToolRunner
+from tsdhn.pipeline.types import ProcessingStep
 from tsdhn.runtime import RuntimeContext
 from tsdhn.utils.file_utils import prepare_simulation_workspace
-from tsdhn.utils.processing import process_step
+from tsdhn.utils.processing import is_step_complete, process_step
 
 __all__ = [
     "Artifact",
@@ -21,7 +21,15 @@ __all__ = [
     "SimulationRequest",
     "SimulationResult",
     "run_simulation",
+    "step_directory",
+    "write_artifact_bundle",
 ]
+
+
+def step_directory(work_dir: Path, step: ProcessingStep) -> Path:
+    """Where `step` runs: the job work_dir, or a subdirectory of it."""
+    return work_dir / step.working_dir if step.working_dir else work_dir
+
 
 ProgressCallback = Callable[[str, dict[str, Any]], None]
 
@@ -35,8 +43,12 @@ class SimulationRequest:
     input: EarthquakeInput
     work_dir: Path
     model_dir: Path | None = None
-    tools_dir: Path | None = None
     model_version: str | None = None
+    # Preserve an existing work_dir instead of wiping it, so completed step
+    # outputs and any tsunami checkpoint survive. The compute plane sets
+    # this when a crashed job is requeued onto the same work_dir; the
+    # researcher CLI leaves it False so every run starts clean.
+    resume: bool = False
 
 
 @dataclass(frozen=True)
@@ -77,20 +89,14 @@ class SimulationEngine:
         *,
         on_progress: ProgressCallback = _noop,
     ) -> SimulationResult:
-        required_tools = tuple(
-            step.runner.executable
-            for step in self.steps
-            if isinstance(step.runner, ToolRunner)
-        )
         runtime = RuntimeContext.resolve(
             model_dir=request.model_dir,
-            tools_dir=request.tools_dir,
             model_version=request.model_version,
-            require_tools=bool(required_tools),
-            required_tools=required_tools,
         )
         calculator = TsunamiCalculator(runtime.model_dir)
-        prepare_simulation_workspace(runtime.model_dir, request.work_dir)
+        prepare_simulation_workspace(
+            runtime.model_dir, request.work_dir, resume=request.resume
+        )
 
         on_progress("Running earthquake calculations", {})
         calculation = calculator.calculate_earthquake_parameters(
@@ -117,17 +123,25 @@ class SimulationEngine:
         ensure_executables(system_executables)
         total_steps = len(self.steps)
         for index, step in enumerate(self.steps, start=1):
+            step_dir = step_directory(request.work_dir, step)
+            step_dir.mkdir(parents=True, exist_ok=True)
+
+            if request.resume and is_step_complete(step, step_dir):
+                on_progress(
+                    f"Skipping completed step {step.name}",
+                    {
+                        "step": step.name,
+                        "step_index": index,
+                        "total_steps": total_steps,
+                    },
+                )
+                continue
+
             on_progress(
                 f"Processing {step.name}",
                 {"step": step.name, "step_index": index, "total_steps": total_steps},
             )
-            step_dir = (
-                request.work_dir / step.working_dir
-                if step.working_dir
-                else request.work_dir
-            )
-            step_dir.mkdir(parents=True, exist_ok=True)
-            process_step(step, step_dir, runtime.tools_dir)
+            process_step(step, step_dir)
 
         bundle = write_artifact_bundle(
             request=request,
@@ -152,16 +166,16 @@ def run_simulation(
     work_dir: Path,
     *,
     model_dir: Path | None = None,
-    tools_dir: Path | None = None,
     model_version: str | None = None,
+    resume: bool = False,
     on_progress: ProgressCallback = _noop,
 ) -> SimulationResult:
     request = SimulationRequest(
         input=data,
         work_dir=work_dir,
         model_dir=model_dir,
-        tools_dir=tools_dir,
         model_version=model_version,
+        resume=resume,
     )
     return SimulationEngine().run(request, on_progress=on_progress)
 
@@ -183,7 +197,6 @@ def write_artifact_bundle(
         {
             "model_dir": str(runtime.model_dir),
             "model_version": runtime.model_version,
-            "tools_dir": str(runtime.tools_dir) if runtime.tools_dir else None,
             "capabilities": {
                 name: {
                     "available": status.available,

@@ -60,7 +60,7 @@ class TsunamiCalculator:
         self.model_dir = (
             validate_model_dir(model_dir.resolve())
             if model_dir is not None
-            else RuntimeContext.resolve(require_tools=False).model_dir
+            else RuntimeContext.resolve().model_dir
         )
         self.xa: np.ndarray
         self.ya: np.ndarray

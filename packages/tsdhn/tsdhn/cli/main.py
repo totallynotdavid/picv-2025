@@ -107,7 +107,6 @@ def doctor(
         runtime = RuntimeContext.resolve(
             model_dir=model_dir,
             model_version=model_version,
-            require_tools=False,
         )
         model_status = "available"
         model_detail = str(runtime.model_dir)
@@ -147,7 +146,6 @@ def calc(
     runtime = RuntimeContext.resolve(
         model_dir=model_dir,
         model_version=model_version,
-        require_tools=False,
     )
     calculator = TsunamiCalculator(runtime.model_dir)
     with tempfile.TemporaryDirectory() as tmp:
