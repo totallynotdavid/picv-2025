@@ -172,6 +172,7 @@ APT_PACKAGES=(
     libcurl4
     libfftw3-dev
     libgdal-dev
+    libgmt-dev
     liblapack-dev
     libnetcdf-dev
     libpcre3

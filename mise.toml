@@ -26,12 +26,17 @@ coverage = [
 
 security = [
   "uv run bandit -r packages -lll --skip B101",
-  # pip-audit --strict does not support editable workspace packages.
-  # Export only external dependencies and run pip-audit in an isolated env.
-  "uv export --locked --no-hashes --all-packages --no-emit-workspace --output-file=requirements.lock.txt",
-  "uvx pip-audit --strict --requirement requirements.lock.txt",
+  "mise run audit",
+  "mise run audit-toolchain",
   "gitleaks detect --source . --no-banner",
 ]
+
+# Dependencies deploy/api.Dockerfile installs. A finding here is reachable in
+# production, so CI blocks the merge on it.
+audit = "uv audit --locked --preview-features audit-command --no-dev --no-group build"
+
+# Adds the dev group. CI reports findings here without blocking.
+audit-toolchain = "uv audit --locked --preview-features audit-command"
 
 build = [
   "uv build --package tsdhn --out-dir dist/tsdhn",
