@@ -3,7 +3,6 @@ import { index, jsonb, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-cor
 
 import { user } from "./auth.schema";
 
-/** Web-owned request data. Live execution state stays in `compute.jobs`. */
 export const simulation = pgTable(
   "simulation",
   {
@@ -12,20 +11,12 @@ export const simulation = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     params: jsonb("params").notNull(),
-    /** Whether the compute service accepted the request. */
-    dispatchStatus: text("dispatch_status").notNull().default("pending"),
-    dispatchError: text("dispatch_error"),
-    computeBackend: text("compute_backend"),
-    computeJobId: text("compute_job_id"),
+    submissionError: text("submission_error"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .default(sql`now()`)
       .notNull(),
-    dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
   },
-  (table) => [
-    index("simulation_user_created_at_idx").on(table.userId, table.createdAt.desc()),
-    index("simulation_dispatch_status_idx").on(table.dispatchStatus),
-  ],
+  (table) => [index("simulation_user_created_at_idx").on(table.userId, table.createdAt.desc())],
 );
 
 export const simulationRelations = relations(simulation, ({ one }) => ({

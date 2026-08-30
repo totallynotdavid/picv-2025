@@ -1,9 +1,8 @@
 import { integer, jsonb, pgSchema, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
-/** Read-only Drizzle definitions for the compute service's job table. */
 const computeSchema = pgSchema("compute");
 
-export type ArtifactRef = {
+export type StoredOutput = {
   name: string;
   key: string;
   filename: string;
@@ -12,7 +11,7 @@ export type ArtifactRef = {
 
 export const computeJob = computeSchema.table("jobs", {
   id: uuid("id").primaryKey(),
-  externalId: uuid("external_id").notNull().unique(),
+  simulationId: uuid("simulation_id").notNull().unique(),
   status: text("status").notNull(),
   details: text("details"),
   step: text("step"),
@@ -20,7 +19,7 @@ export const computeJob = computeSchema.table("jobs", {
   totalSteps: integer("total_steps"),
   calculation: jsonb("calculation"),
   travelTimes: jsonb("travel_times"),
-  artifacts: jsonb("artifacts").$type<ArtifactRef[]>(),
+  outputs: jsonb("outputs").$type<StoredOutput[]>(),
   error: text("error"),
   startedAt: timestamp("started_at", { withTimezone: true }),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
