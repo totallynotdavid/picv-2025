@@ -1,7 +1,5 @@
 import json
-from collections.abc import Iterator
-from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from io import BytesIO
 from typing import Any
 
@@ -9,22 +7,17 @@ import urllib3
 from minio import Minio
 
 from api.core.settings import (
+    ARTIFACT_URL_TTL,
     MINIO_ACCESS_KEY,
     MINIO_BUCKET,
     MINIO_ENDPOINT,
+    MINIO_PUBLIC_ENDPOINT,
     MINIO_SECRET_KEY,
     MINIO_SECURE,
 )
 from tsdhn.engine import ArtifactBundle
 
-__all__ = ["ArtifactStore", "StoredObjectInfo", "artifact_store"]
-
-
-@dataclass(frozen=True)
-class StoredObjectInfo:
-    object_name: str
-    size: int
-    content_type: str | None
+__all__ = ["ArtifactStore", "artifact_store"]
 
 
 class ArtifactStore:
@@ -39,6 +32,16 @@ class ArtifactStore:
                 timeout=urllib3.Timeout(connect=2.0, read=2.0),
                 retries=False,
             ),
+        )
+        # Presigned URLs are handed to a browser, so they must be signed
+        # against the endpoint the browser can reach -- not the in-cluster
+        # one this process dials. Signing is offline (no request is made),
+        # so this second client never needs to connect.
+        self._public_client = Minio(
+            MINIO_PUBLIC_ENDPOINT,
+            access_key=MINIO_ACCESS_KEY,
+            secret_key=MINIO_SECRET_KEY,
+            secure=MINIO_SECURE,
         )
 
     def is_connected(self) -> bool:
@@ -91,29 +94,28 @@ class ArtifactStore:
 
         return self.bucket, metadata_key
 
-    def stat_object(self, object_name: str) -> StoredObjectInfo:
-        result = self._client.stat_object(
-            bucket_name=self.bucket,
-            object_name=object_name,
-        )
-        return StoredObjectInfo(
-            object_name=object_name,
-            size=int(result.size or 0),
-            content_type=result.content_type,
-        )
+    def presigned_url(self, object_name: str, *, filename: str) -> str:
+        """A time-limited GET URL a browser can follow directly.
 
-    def stream_object(
-        self, object_name: str, *, chunk_size: int = 1024 * 1024
-    ) -> Iterator[bytes]:
-        response = self._client.get_object(
-            bucket_name=self.bucket,
-            object_name=object_name,
-        )
+        This is how artifacts reach users: the control plane checks
+        ownership and redirects here, so report PDFs never stream through
+        the Node process or through FastAPI. `response-content-disposition`
+        makes the browser save the file under its artifact name rather than
+        the object key's basename.
+        """
         try:
-            yield from response.stream(chunk_size)
-        finally:
-            response.close()
-            response.release_conn()
+            return self._public_client.presigned_get_object(
+                bucket_name=self.bucket,
+                object_name=object_name,
+                expires=timedelta(seconds=ARTIFACT_URL_TTL),
+                response_headers={
+                    "response-content-disposition": (
+                        f'attachment; filename="{filename}"'
+                    )
+                },
+            )
+        except (MinioException, urllib3.exceptions.HTTPError, OSError) as e:
+            raise TransientInfraError("presigning artifact URL failed") from e
 
 
 def iso(value: datetime | None) -> str | None:

@@ -102,9 +102,12 @@ assert_queued_job() {
     docker compose exec -T postgres psql -U tsdhn -d tsdhn_compute -c \
         "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE 'procrastinate_%' ORDER BY tablename"
 
+    # api.prepare_simulation is the first hop of the chained pipeline
+    # (prepare -> run_pipeline_step x N -> finalize); api.run_simulation was
+    # the old monolithic task name, retired when the chain was introduced.
     queue_count="$(
         docker compose exec -T postgres psql -U tsdhn -d tsdhn_compute -tAc \
-            "SELECT count(*) FROM procrastinate_jobs WHERE task_name = 'api.run_simulation' AND queue_name = 'simulations'"
+            "SELECT count(*) FROM procrastinate_jobs WHERE task_name = 'api.prepare_simulation' AND queue_name = 'simulations'"
     )"
     test "$queue_count" = "1"
 }

@@ -5,6 +5,8 @@ from pydantic import BaseModel
 from tsdhn.domain import CalculationResponse, EarthquakeInput, TsunamiTravelResponse
 
 __all__ = [
+    "ArtifactList",
+    "ArtifactRef",
     "CalculationPreview",
     "HealthStatus",
     "JobCreated",
@@ -50,7 +52,20 @@ class JobStatusResponse(BaseModel):
     created_at: str | None = None
     started_at: str | None = None
     finished_at: str | None = None
-    artifacts_available: bool = False
+    # Names of the artifacts this job produced, empty until it completes.
+    # Fetch one with GET /api/v1/jobs/{app_job_id}/artifacts/{name}.
+    artifacts: list[str] = []
+
+
+class ArtifactRef(BaseModel):
+    name: str
+    filename: str
+    content_type: str
+
+
+class ArtifactList(BaseModel):
+    app_job_id: str
+    artifacts: list[ArtifactRef]
 
 
 class HealthStatus(BaseModel):

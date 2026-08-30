@@ -14,7 +14,7 @@ dependencies = [
     "uvicorn==0.51.0",
     "pydantic==2.13.4",
     "anyio==4.14.1",
-    "psycopg[binary]>=3.3.4",
+    "psycopg[binary,pool]>=3.3.4",
     "minio>=7.2.20",
     "procrastinate>=3.9.0",
 ]

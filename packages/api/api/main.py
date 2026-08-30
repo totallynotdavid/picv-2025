@@ -8,12 +8,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api import __version__
+from api.core.db import close_pool, get_pool
+from api.core.settings import LOG_LEVEL
 from api.routes import get_calculator, ops_router, router
 
+# Logs go to stdout, at INFO by default. They used to go to a file inside
+# the container at DEBUG, which made them invisible to `docker logs`, grew
+# without bound on the container filesystem, and wrote the raw tracebacks
+# that compute.jobs.error is careful to redact into a file nobody rotates.
 logging.basicConfig(
-    filename=os.environ.get("TSDHN_API_LOG", "tsunami_api.log"),
-    level=logging.DEBUG,
-    format="%(asctime)s - %(levelname)s - %(message)s",
+    level=LOG_LEVEL,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
@@ -21,8 +26,14 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     get_calculator()
+    # Warm the pool without waiting: the API still boots and serves
+    # /health (reporting degraded) when Postgres is not up yet.
+    get_pool()
     logger.info("TSDHN API ready")
-    yield
+    try:
+        yield
+    finally:
+        close_pool()
 
 
 def create_app() -> FastAPI:
@@ -57,7 +68,7 @@ def start_app() -> None:
         app,
         host=os.environ.get("APP_HOST", "127.0.0.1"),
         port=int(os.environ.get("APP_PORT", "8000")),
-        log_level="info",
+        log_level=LOG_LEVEL.lower(),
     )
 
 

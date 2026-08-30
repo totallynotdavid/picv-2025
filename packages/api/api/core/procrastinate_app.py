@@ -6,5 +6,5 @@ __all__ = ["app"]
 
 app = procrastinate.App(
     connector=procrastinate.PsycopgConnector(conninfo=COMPUTE_DATABASE_URL),
-    import_paths=("api.core.jobs",),
+    import_paths=("api.core.tasks",),
 )
