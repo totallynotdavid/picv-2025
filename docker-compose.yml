@@ -1,0 +1,155 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tsdhn
+      POSTGRES_USER: tsdhn
+      POSTGRES_PASSWORD: tsdhn
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tsdhn -d tsdhn"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  compute-migrate:
+    image: ${API_IMAGE:-tsdhn-api:local}
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+      args:
+        TOOLCHAIN_IMAGE: ${TOOLCHAIN_IMAGE:-ghcr.io/totallynotdavid/tsdhn-toolchain:master}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      COMPUTE_DATABASE_URL: postgresql://tsdhn:tsdhn@postgres:5432/tsdhn
+      APP_DB_ROLE: ${APP_DB_ROLE:-tsdhn_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+    command:
+      [
+        "sh",
+        "-lc",
+        "uv run --no-dev tsdhn-compute-migrate && uv run --no-dev tsdhn-procrastinate-migrate",
+      ]
+    restart: "no"
+
+  api:
+    image: ${API_IMAGE:-tsdhn-api:local}
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+      args:
+        TOOLCHAIN_IMAGE: ${TOOLCHAIN_IMAGE:-ghcr.io/totallynotdavid/tsdhn-toolchain:master}
+    restart: unless-stopped
+    depends_on:
+      compute-migrate:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+    environment:
+      COMPUTE_DATABASE_URL: postgresql://tsdhn:tsdhn@postgres:5432/tsdhn
+      MINIO_ENDPOINT: minio:9000
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-localhost:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-tsdhn-results}
+      COMPUTE_API_TOKEN: ${COMPUTE_API_TOKEN:?set COMPUTE_API_TOKEN in .env}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+    ports:
+      - "8000:8000"
+
+  worker:
+    image: ${API_IMAGE:-tsdhn-api:local}
+    build:
+      context: .
+      dockerfile: deploy/api.Dockerfile
+      args:
+        TOOLCHAIN_IMAGE: ${TOOLCHAIN_IMAGE:-ghcr.io/totallynotdavid/tsdhn-toolchain:master}
+    restart: unless-stopped
+    depends_on:
+      compute-migrate:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+    environment:
+      COMPUTE_DATABASE_URL: postgresql://tsdhn:tsdhn@postgres:5432/tsdhn
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET: ${MINIO_BUCKET:-tsdhn-results}
+      TSDHN_MODEL_DIR: /app/model
+      TSDHN_JOBS_DIR: /var/tmp/jobs
+    command: ["uv", "run", "--no-dev", "tsdhn-worker"]
+    volumes:
+      - jobs-data:/var/tmp/jobs
+
+  web-migrate:
+    image: ${WEB_IMAGE:-tsdhn-web:local}
+    profiles: ["web"]
+    depends_on:
+      compute-migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgresql://tsdhn:tsdhn@postgres:5432/tsdhn
+    command: ["bun", "run", "db:migrate"]
+    restart: "no"
+
+  web-grants:
+    image: ${API_IMAGE:-tsdhn-api:local}
+    profiles: ["web"]
+    depends_on:
+      web-migrate:
+        condition: service_completed_successfully
+    environment:
+      COMPUTE_DATABASE_URL: postgresql://tsdhn:tsdhn@postgres:5432/tsdhn
+      APP_DB_ROLE: ${APP_DB_ROLE:-tsdhn_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+    command: ["uv", "run", "--no-dev", "tsdhn-web-grants"]
+    restart: "no"
+
+  web:
+    image: ${WEB_IMAGE:-tsdhn-web:local}
+    profiles: ["web"]
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      web-grants:
+        condition: service_completed_successfully
+      api:
+        condition: service_started
+    environment:
+      COMPUTE_API_URL: http://api:8000
+      COMPUTE_API_TOKEN: ${COMPUTE_API_TOKEN:?set COMPUTE_API_TOKEN in .env}
+      DATABASE_URL: postgresql://${APP_DB_ROLE:-tsdhn_app}:${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}@postgres:5432/tsdhn
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
+      ORIGIN: ${ORIGIN:-http://localhost:3000}
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres-data:
+  minio-data:
+  jobs-data:
