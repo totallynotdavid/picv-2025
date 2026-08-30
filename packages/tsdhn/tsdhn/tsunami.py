@@ -13,7 +13,7 @@ from tsdhn.utils.file_utils import atomic_write
 
 logger = logging.getLogger(__name__)
 
-# Numba has no type stubs for prange, so keep the alias typed for mypy.
+# Numba lacks type stubs for prange; keep this alias typed for mypy.
 prange = cast("Callable[[int, int], range]", numba.prange)
 
 
@@ -31,7 +31,7 @@ KD = 20
 NG = 17
 _RT = np.float32(6.37e6)
 _BLATA = np.float32(-76.006)
-# Compute pi through float32 atan to match the legacy arithmetic.
+# Compute pi through float32 atan to match legacy Fortran arithmetic (like deform.py).
 _PI = np.float32(4.0) * np.arctan(np.float32(1.0))
 _DA = _PI * _DELTA / np.float32(180.0)
 _GG = np.float32(9.8)
@@ -39,8 +39,7 @@ _FLUSH = np.float32(1.0e-5)
 
 
 def _read_xyo_dat(path: Path) -> tuple[int, int, int, int]:
-    # The legacy reader consumes four tokens; trailing grid dimensions are
-    # padding written by the fault-plane step.
+    # Parse the first four tokens; trailing values are padding from fault-plane.
     ids, ide, jds, jde = path.read_text().split()[:4]
     return int(float(ids)), int(float(ide)), int(float(jds)), int(float(jde))
 

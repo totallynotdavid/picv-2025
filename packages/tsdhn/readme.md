@@ -4,10 +4,8 @@
 run the same Python pipeline.
 
 The Python implementation is replacing a collection of MATLAB and Fortran
-programs. Compatibility with those programs is useful evidence, but it is not
-proof that a result is physically correct. The researcher guides distinguish
-documented scientific sources from rules that are known only from the older
-code.
+programs. The engine preserves legacy behavior to demonstrate successful
+porting, but compatibility does not establish scientific validity.
 
 ## Start here
 

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def main() -> None:  # pragma: no cover
     if NUMBA_THREADS is not None:
-        # Numba ships no type stubs for this call.
+        # Numba lacks type stubs; suppress type checking.
         numba.set_num_threads(NUMBA_THREADS)  # type: ignore[no-untyped-call]
         logger.info(
             "numba parallel-region thread count capped to %d (TSDHN_NUMBA_THREADS)",
