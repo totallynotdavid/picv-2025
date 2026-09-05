@@ -16,7 +16,7 @@ SvelteKit web app
   |
   v
 FastAPI compute service
-  |-- compute.jobs and the Procrastinate queue
+  |-- compute.jobs and the rqueue task_queue schema
   |-- worker -> tsdhn engine -> MinIO
 ```
 
@@ -48,7 +48,7 @@ job ID, a compute-service selector, or output storage keys.
 The compute service owns:
 
 - the API used by the web server;
-- `compute.jobs` and the Procrastinate queue tables;
+- `compute.jobs` and the `task_queue` schema rqueue owns;
 - the internal compute job ID;
 - job progress, retry state, and worker heartbeats;
 - simulation work directories and checkpoints;
@@ -93,8 +93,8 @@ submission_error
 created_at
 ```
 
-The compute service creates and writes `compute.jobs` and the Procrastinate
-queue tables. `compute.jobs.simulation_id` links a compute job to the web
+The compute service creates and writes `compute.jobs` and the `task_queue`
+schema rqueue owns. `compute.jobs.simulation_id` links a compute job to the web
 simulation. The value is unique because repeating a submission must return the
 same compute job.
 
@@ -191,3 +191,30 @@ The engine records enough state to continue valid completed work after a
 retry. The compute service keeps the job in `compute.jobs` and reports the
 final failure when retries are exhausted. Deployment settings determine retry
 limits, worker recovery, storage, and cleanup.
+
+A worker asked to stop gracefully stops taking new work and gives what it is
+already running a short grace period. A simulation runs far longer than that, so
+it is cancelled and its claim is handed straight back for another worker, which
+resumes from the checkpoints in the job's work directory.
+
+A worker that dies mid-run loses its lease, and the queue reclaims the job
+without asking the dead worker anything. When that happens on the job's last
+attempt the queue records the failure by itself, so no running code is left to
+update `compute.jobs`. The worker process therefore reconciles: it periodically
+finds jobs the queue has finished that `compute.jobs` still shows as running,
+and marks them failed with an error saying the status was reconciled rather
+than reported by the run. A job that reported its own outcome is never
+overwritten.
+
+Because the simulation runs on a thread that the service cannot stop on demand,
+a job records which attempt currently owns it, and every write an attempt makes
+is accepted only if that attempt still owns the job and the job is not already
+finished. A late write from an attempt that has been replaced, or from one whose
+job has already been reconciled, is refused rather than applied.
+
+The same reasoning covers the job's working directory, which holds the
+checkpoints a retry resumes from. An attempt holds an exclusive claim on that
+directory for as long as its simulation is actually running, so a replacement
+never reads checkpoints another attempt is still writing. If the worker process
+dies the claim is released with it, and the replacement resumes normally; if the
+previous attempt is still running, the replacement waits and retries instead.

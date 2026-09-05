@@ -1,63 +1,64 @@
-"""Database-free tests for retry, failure, and notification behavior."""
+"""Database-free tests for retry policy and payload decoding."""
 
 import uuid
 
-from procrastinate.jobs import Job as ProcrastinateJob
+import pytest
+from rqueue import PermanentFailure
 
-from api.core.db import notify_channel
 from api.core.errors import TransientInfraError
-from api.core.tasks import MAX_ATTEMPTS, TRANSIENT_RETRY, reap_action
-
-
-def _job(attempts: int, job_id: int | None = None) -> ProcrastinateJob:
-    return ProcrastinateJob(
-        id=job_id,
-        queue="simulations",
-        lock=None,
-        queueing_lock=None,
-        task_name="api.run_simulation",
-        task_kwargs={"compute_job_id": "11111111-1111-4111-8111-111111111111"},
-        attempts=attempts,
-    )
+from api.core.tasks import MAX_ATTEMPTS, RUN_SIMULATION, TRANSIENT_RETRY, decode_payload
 
 
 def test_transient_retry_retries_transient_infra_error_within_budget() -> None:
-    decision = TRANSIENT_RETRY.get_retry_decision(
-        exception=TransientInfraError("db down"), job=_job(attempts=0)
+    assert TRANSIENT_RETRY.should_retry(TransientInfraError("db down"), attempt=1)
+    assert TRANSIENT_RETRY.should_retry(
+        TransientInfraError("db down"), attempt=MAX_ATTEMPTS - 1
     )
-    assert decision is not None
 
 
 def test_transient_retry_gives_up_once_attempts_exhausted() -> None:
-    decision = TRANSIENT_RETRY.get_retry_decision(
-        exception=TransientInfraError("db down"),
-        job=_job(attempts=MAX_ATTEMPTS),
+    assert not TRANSIENT_RETRY.should_retry(
+        TransientInfraError("db down"), attempt=MAX_ATTEMPTS
     )
-    assert decision is None
 
 
 def test_transient_retry_does_not_retry_other_exceptions() -> None:
-    decision = TRANSIENT_RETRY.get_retry_decision(
-        exception=RuntimeError("bad epicenter"), job=_job(attempts=0)
-    )
-    assert decision is None
+    # retry_on is an allowlist: a pipeline error is terminal on attempt one.
+    assert not TRANSIENT_RETRY.should_retry(RuntimeError("bad epicenter"), attempt=1)
 
 
-def test_notify_channel_is_a_bare_identifier_per_job() -> None:
-    simulation_id = uuid.UUID("4cfe522f-7e7d-46e0-96ca-7b98743fb9f5")
-    channel = notify_channel(simulation_id)
-
-    assert channel == "tsdhn_job_4cfe522f7e7d46e096ca7b98743fb9f5"
-    # No hyphens or quoting needed: it goes straight into LISTEN/NOTIFY.
-    assert channel.replace("_", "").isalnum()
-    assert notify_channel(uuid.uuid4()) != channel
+def test_transient_retry_never_retries_a_permanent_failure() -> None:
+    assert not TRANSIENT_RETRY.should_retry(PermanentFailure("unknown job"), attempt=1)
 
 
-def test_reap_action_retries_a_stalled_job_within_budget() -> None:
-    assert reap_action(_job(attempts=0)) == "retry"
-    assert reap_action(_job(attempts=MAX_ATTEMPTS - 1)) == "retry"
+def test_transient_retry_backs_off_exponentially_from_fifteen_seconds() -> None:
+    first = TRANSIENT_RETRY.backoff_seconds(1)
+    second = TRANSIENT_RETRY.backoff_seconds(2)
+
+    # Jitter is +/-10%, so these are ranges rather than exact values.
+    assert 13.5 <= first <= 16.5
+    assert 27.0 <= second <= 33.0
 
 
-def test_reap_action_gives_up_once_the_budget_is_spent() -> None:
-    assert reap_action(_job(attempts=MAX_ATTEMPTS)) == "exhausted"
-    assert reap_action(_job(attempts=MAX_ATTEMPTS + 1)) == "exhausted"
+def test_the_task_name_is_the_one_already_deployed() -> None:
+    # Renaming this strands every job a running deployment has already queued.
+    assert RUN_SIMULATION == "api.run_simulation"
+
+
+def test_decode_payload_reads_the_compute_job_id() -> None:
+    compute_job_id = uuid.uuid4()
+
+    assert decode_payload({"compute_job_id": str(compute_job_id)}) == compute_job_id
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [None, [], "compute_job_id", {}, {"compute_job_id": "not-a-uuid"}],
+)
+def test_decode_payload_rejects_anything_it_cannot_name_a_job_from(
+    payload: object,
+) -> None:
+    # A decode failure is durable in rqueue and costs no retry budget, so it
+    # has to raise rather than return a placeholder.
+    with pytest.raises((ValueError, KeyError, TypeError)):
+        decode_payload(payload)

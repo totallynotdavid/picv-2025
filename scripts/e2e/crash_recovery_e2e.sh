@@ -9,6 +9,7 @@ set -euo pipefail
 : "${MINIO_SECRET_KEY:=minioadmin}"
 : "${MINIO_BUCKET:=tsdhn-results}"
 : "${COMPUTE_API_URL:=http://localhost:8000}"
+: "${COMPUTE_QUEUE_SCHEMA:=task_queue}"
 # The crash must happen after the resumable step writes a checkpoint.
 : "${TSUNAMI_CHECKPOINT_WAIT_SECONDS:=120}"
 
@@ -110,27 +111,27 @@ scenario_crash_and_requeue() {
     echo "In tsunami step; waiting ${TSUNAMI_CHECKPOINT_WAIT_SECONDS}s for checkpoints to accumulate"
     sleep "$TSUNAMI_CHECKPOINT_WAIT_SECONDS"
 
-    # Requeueing increments the existing queue row's attempt counter.
+    # Recovering an expired lease increments the same queue row's attempt.
     local queue_job_id before_attempts
     queue_job_id="$(
-        psql_c "SELECT id FROM procrastinate_jobs
-                WHERE task_name = 'api.run_simulation'
-                  AND task_kwargs->>'compute_job_id' =
+        psql_c "SELECT id FROM $COMPUTE_QUEUE_SCHEMA.jobs
+                WHERE task = 'api.run_simulation'
+                  AND payload->>'compute_job_id' =
                       (SELECT id::text FROM compute.jobs
                        WHERE simulation_id = '$CRASH_SIMULATION_ID'::uuid)"
     )"
     test -n "$queue_job_id"
-    before_attempts="$(psql_c "SELECT attempts FROM procrastinate_jobs WHERE id = $queue_job_id")"
+    before_attempts="$(psql_c "SELECT attempt FROM $COMPUTE_QUEUE_SCHEMA.jobs WHERE id = '$queue_job_id'::uuid")"
 
     echo "Killing worker (SIGKILL) to simulate a crash"
     docker compose kill -s SIGKILL worker
 
-    echo "Waiting up to 240s for the reaper to detect the stale job and requeue it"
+    echo "Waiting up to 240s for rqueue to recover the expired lease and requeue it"
     local deadline requeued=0
     deadline=$((SECONDS + 240))
     while [ "$SECONDS" -lt "$deadline" ]; do
         local attempts status
-        attempts="$(psql_c "SELECT attempts FROM procrastinate_jobs WHERE id = $queue_job_id")"
+        attempts="$(psql_c "SELECT attempt FROM $COMPUTE_QUEUE_SCHEMA.jobs WHERE id = '$queue_job_id'::uuid")"
         status="$(job_status "$CRASH_SIMULATION_ID" | jq -r .status)"
         if [ "$status" = "failed" ]; then
             echo "::error::Job was marked FAILED instead of being requeued"
@@ -146,7 +147,7 @@ scenario_crash_and_requeue() {
         echo "::error::Job was never requeued after the worker crash"
         return 1
     }
-    echo "Confirmed: attempts incremented on the same queue job, not marked FAILED"
+    echo "Confirmed: attempt incremented on the same queue job, not marked FAILED"
 
     poll_job_to_completion "$CRASH_SIMULATION_ID" 1800
 
@@ -175,12 +176,27 @@ scenario_ttl_sweep() {
     " > /dev/null
 
     docker compose exec -T worker uv run --no-dev python -c "
-from api.core.tasks import sweep_abandoned_work_dirs_task
-sweep_abandoned_work_dirs_task(0)
+import asyncio
+
+from api.core import db
+from api.core.settings import worker_pool_size
+from api.core.tasks import sweep_abandoned_work_dirs
+
+
+async def main():
+    minimum, maximum = worker_pool_size()
+    await db.open_pool(min_size=minimum, max_size=maximum)
+    try:
+        await sweep_abandoned_work_dirs()
+    finally:
+        await db.close_pool()
+
+
+asyncio.run(main())
 "
 
     if docker compose exec -T worker test -e "$work_dir"; then
-        echo "::error::sweep_abandoned_work_dirs_task did not remove $work_dir"
+        echo "::error::sweep_abandoned_work_dirs did not remove $work_dir"
         return 1
     fi
     echo "Confirmed: expired FAILED job's work_dir was swept"

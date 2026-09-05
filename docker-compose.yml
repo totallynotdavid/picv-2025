@@ -44,13 +44,14 @@ services:
         condition: service_healthy
     environment:
       COMPUTE_DATABASE_URL: postgresql://tsdhn:tsdhn@postgres:5432/tsdhn
+      COMPUTE_QUEUE_SCHEMA: ${COMPUTE_QUEUE_SCHEMA:-task_queue}
       APP_DB_ROLE: ${APP_DB_ROLE:-tsdhn_app}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
     command:
       [
         "sh",
         "-lc",
-        "uv run --no-dev tsdhn-compute-migrate && uv run --no-dev tsdhn-procrastinate-migrate",
+        "uv run --no-dev tsdhn-compute-migrate && uv run --no-dev rqueue --database-url \"$$COMPUTE_DATABASE_URL\" --schema \"$$COMPUTE_QUEUE_SCHEMA\" migrate",
       ]
     restart: "no"
 
@@ -69,6 +70,8 @@ services:
         condition: service_healthy
     environment:
       COMPUTE_DATABASE_URL: postgresql://tsdhn:tsdhn@postgres:5432/tsdhn
+      COMPUTE_QUEUE: ${COMPUTE_QUEUE:-simulations}
+      COMPUTE_QUEUE_SCHEMA: ${COMPUTE_QUEUE_SCHEMA:-task_queue}
       MINIO_ENDPOINT: minio:9000
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-localhost:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
@@ -94,6 +97,8 @@ services:
         condition: service_healthy
     environment:
       COMPUTE_DATABASE_URL: postgresql://tsdhn:tsdhn@postgres:5432/tsdhn
+      COMPUTE_QUEUE: ${COMPUTE_QUEUE:-simulations}
+      COMPUTE_QUEUE_SCHEMA: ${COMPUTE_QUEUE_SCHEMA:-task_queue}
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}

@@ -6,6 +6,7 @@ base_url="postgresql://tsdhn:tsdhn@127.0.0.1:5432/tsdhn"
 database_name="tsdhn_integration_$(date +%s)_$$"
 app_role="${database_name}_role"
 app_password="tsdhn-web-test-password"
+queue_schema="${COMPUTE_QUEUE_SCHEMA:-task_queue}"
 
 case "${1:-}" in
     "") coverage=0 ;;
@@ -44,8 +45,7 @@ APP_DB_ROLE="$app_role" \
 APP_DB_PASSWORD="$app_password" \
 uv run tsdhn-compute-migrate
 
-COMPUTE_DATABASE_URL="$admin_url" \
-uv run tsdhn-procrastinate-migrate
+uv run rqueue --database-url "$admin_url" --schema "$queue_schema" migrate
 
 # Schema changes run with the database-owner connection. The app role below
 # is intentionally limited to runtime DML and compute-state reads.

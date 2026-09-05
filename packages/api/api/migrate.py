@@ -1,6 +1,6 @@
 """Create the compute schema and provision the web database role.
 
-Run this before applying the Procrastinate and web schemas. The command uses
+Run this before applying the queue and web schemas. The command uses
 the database owner for migrations; the web role is a runtime-only role.
 """
 
