@@ -97,6 +97,7 @@ exclude_lines = [
 testpaths = ["packages/tsdhn/tests", "packages/api/tests", "packages/tsdhn-parity/tests"]
 pythonpath = ["."]
 addopts = "-ra"
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     "golden: requires the real compiled toolchain; see mise run test-golden",
     "integration: uses disposable databases on the mise-managed PostgreSQL cluster; see mise run test-integration",

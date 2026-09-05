@@ -7,6 +7,8 @@ set -euo pipefail
 : "${MINIO_SECRET_KEY:=minioadmin}"
 : "${MINIO_BUCKET:=tsdhn-results}"
 : "${COMPUTE_API_URL:=http://localhost:8000}"
+: "${COMPUTE_QUEUE_SCHEMA:=task_queue}"
+: "${COMPUTE_QUEUE:=simulations}"
 
 wait_for_api() {
     for _ in {1..60}; do
@@ -101,12 +103,12 @@ assert_queued_job() {
     test "$compute_count" = "1"
 
     docker compose exec -T postgres psql -U tsdhn -d tsdhn -c \
-        "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename LIKE 'procrastinate_%' ORDER BY tablename"
+        "SELECT tablename FROM pg_tables WHERE schemaname = '$COMPUTE_QUEUE_SCHEMA' ORDER BY tablename"
 
     # Idempotent submissions must not create a second queue row.
     queue_count="$(
         docker compose exec -T postgres psql -U tsdhn -d tsdhn -tAc \
-            "SELECT count(*) FROM procrastinate_jobs WHERE task_name = 'api.run_simulation' AND queue_name = 'simulations'"
+            "SELECT count(*) FROM $COMPUTE_QUEUE_SCHEMA.jobs WHERE task = 'api.run_simulation' AND queue = '$COMPUTE_QUEUE'"
     )"
     test "$queue_count" = "1"
 }

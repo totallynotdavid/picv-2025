@@ -1,7 +1,7 @@
 [project]
 name = "tsdhn-api"
 version = "0.0.1"
-description = "TSDHN FastAPI service and Procrastinate worker"
+description = "TSDHN FastAPI service and rqueue simulation worker"
 requires-python = ">=3.14"
 readme = "readme.md"
 license = { text = "MIT" }
@@ -14,16 +14,16 @@ dependencies = [
     "uvicorn==0.51.0",
     "pydantic==2.13.4",
     "anyio==4.14.1",
-    "psycopg[binary,pool]>=3.3.4",
+    "psycopg[binary]>=3.3.4",
     "minio>=7.2.20",
-    "procrastinate>=3.9.0",
+    "asyncpg>=0.31.0",
+    "rqueue",
 ]
 
 [project.scripts]
 tsdhn-api = "api.main:start_app"
 tsdhn-worker = "api.worker:main"
 tsdhn-compute-migrate = "api.migrate:main"
-tsdhn-procrastinate-migrate = "api.queue_migrate:main"
 tsdhn-web-grants = "api.web_grants:main"
 
 [build-system]
@@ -33,3 +33,6 @@ build-backend = "uv_build"
 [tool.uv.build-backend]
 module-name = "api"
 module-root = ""
+
+[tool.uv.sources]
+rqueue = { git = "https://github.com/totallynotdavid/transactions.git", rev = "545d67aa341372c663972427b2b520fcd07faf80" }

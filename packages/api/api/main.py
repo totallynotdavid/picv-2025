@@ -8,8 +8,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api import __version__
-from api.core.db import close_pool, get_pool
-from api.core.settings import LOG_LEVEL
+from api.core import db
+from api.core.queue import build_queue
+from api.core.settings import LOG_LEVEL, api_pool_size
+from api.core.tasks import register_tasks
 from api.routes import get_calculator, ops_router, router
 
 # Send logs to stdout so container runtimes can collect them.
@@ -23,13 +25,15 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     get_calculator()
-    # Open the pool without waiting for Postgres.
-    get_pool()
+    min_size, max_size = api_pool_size()
+    # A zero floor keeps this from waiting on Postgres to start.
+    pool = await db.open_pool(min_size=min_size, max_size=max_size)
+    register_tasks(build_queue(pool))
     logger.info("TSDHN API ready")
     try:
         yield
     finally:
-        close_pool()
+        await db.close_pool()
 
 
 def create_app() -> FastAPI:

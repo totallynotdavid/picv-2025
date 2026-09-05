@@ -1,16 +1,33 @@
 """Database-role behavior for the compute migration."""
 
+import asyncio
 import uuid
 from collections.abc import Iterator
 
+import asyncpg
 import psycopg
 import pytest
 from psycopg import sql
+from rqueue import migrations
 
-from api import migrate, queue_migrate, web_grants
+from api import migrate, web_grants
 from api.core.schema import COMPUTE_SCHEMA_SQL
+from api.core.settings import COMPUTE_QUEUE_SCHEMA
 
 pytestmark = pytest.mark.integration
+
+
+def _apply_queue_schema(database_url: str) -> None:
+    """Apply rqueue's own migrations the way a deployment's CLI does."""
+
+    async def apply() -> None:
+        connection = await asyncpg.connect(database_url)
+        try:
+            await migrations.migrate(connection, schema=COMPUTE_QUEUE_SCHEMA)
+        finally:
+            await connection.close()
+
+    asyncio.run(apply())
 
 
 @pytest.fixture
@@ -179,21 +196,15 @@ def test_provision_web_role_transfers_legacy_table_ownership(
     assert owner == (migration_user,)
 
 
-def test_procrastinate_schema_migration_is_repeatable(isolated_database: str) -> None:
-    queue_migrate.apply_schema(isolated_database)
-    queue_migrate.apply_schema(isolated_database)
-
-    with psycopg.connect(isolated_database) as conn:
-        assert all(queue_migrate.queue_schema_state(conn))
-
-
-def test_web_role_cannot_read_compute_queue_tables(
+def test_web_role_cannot_read_the_queue_tables(
     isolated_database: str, temporary_web_role: str
 ) -> None:
+    # The queue lives in its own schema, which the web grants never mention.
+    # Stage 2 owns rqueue's own least-privilege roles; this asserts the floor.
     with psycopg.connect(isolated_database) as conn:
         web_grants.grant_web_tables(conn)
         conn.commit()
-    queue_migrate.apply_schema(isolated_database)
+    _apply_queue_schema(isolated_database)
 
     with (
         psycopg.connect(
@@ -201,4 +212,4 @@ def test_web_role_cannot_read_compute_queue_tables(
         ) as conn,
         pytest.raises(psycopg.errors.InsufficientPrivilege),
     ):
-        conn.execute("SELECT 1 FROM compute.procrastinate_jobs")
+        conn.execute(f"SELECT 1 FROM {COMPUTE_QUEUE_SCHEMA}.jobs")  # noqa: S608

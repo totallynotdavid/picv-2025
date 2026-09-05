@@ -23,8 +23,16 @@ CREATE TABLE IF NOT EXISTS compute.jobs (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   started_at timestamptz,
-  finished_at timestamptz
+  finished_at timestamptz,
+  -- Which task-queue attempt currently owns this row. Every write an attempt
+  -- makes during its run carries its own number and matches on this column in
+  -- the same statement, so a write from an attempt that has been superseded
+  -- matches zero rows instead of racing the attempt that replaced it. NULL
+  -- until the first attempt claims the row.
+  owner_attempt integer
 );
+
+ALTER TABLE compute.jobs ADD COLUMN IF NOT EXISTS owner_attempt integer;
 
 DO $$
 BEGIN

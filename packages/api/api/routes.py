@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 import json
 import logging
 import tempfile
@@ -8,14 +10,13 @@ from pathlib import Path
 from typing import Any
 
 import anyio
-import psycopg
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse, StreamingResponse
 
 from api import __version__
-from api.core import repository
-from api.core.db import CONNECT_TIMEOUT, notify_channel
-from api.core.settings import COMPUTE_DATABASE_URL, SSE_MAX_DURATION
+from api.core import db, repository
+from api.core.db import notify_channel
+from api.core.settings import SSE_MAX_DURATION
 from api.core.storage import output_store
 from api.core.tasks import enqueue_simulation
 from api.schemas import (
@@ -56,9 +57,7 @@ router = APIRouter(
 
 @ops_router.get("/health", response_model=HealthStatus)
 async def health() -> HealthStatus:
-    database_connected = await anyio.to_thread.run_sync(
-        repository.is_database_connected
-    )
+    database_connected = await repository.is_database_connected()
     storage_connected = await anyio.to_thread.run_sync(output_store.is_connected)
     return HealthStatus(
         status="healthy" if database_connected and storage_connected else "degraded",
@@ -95,13 +94,10 @@ async def create_calculation(data: EarthquakeInput) -> CalculationPreview:
 async def create_job(req: JobRequest) -> JobCreated:
     simulation_id = str(req.simulation_id)
     try:
-        job_status = await anyio.to_thread.run_sync(
-            partial(
-                repository.create_or_get_job,
-                data=req.input,
-                simulation_id=simulation_id,
-                defer=enqueue_simulation,
-            )
+        job_status = await repository.create_or_get_job(
+            data=req.input,
+            simulation_id=simulation_id,
+            defer=enqueue_simulation,
         )
     except ValueError as e:
         raise HTTPException(
@@ -129,7 +125,7 @@ async def get_job(simulation_id: str) -> JobStatusResponse:
 @router.get("/jobs/{simulation_id}/outputs", response_model=OutputList)
 async def list_outputs(simulation_id: str) -> OutputList:
     try:
-        outputs = await anyio.to_thread.run_sync(repository.get_outputs, simulation_id)
+        outputs = await repository.get_outputs(simulation_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     return OutputList(
@@ -152,7 +148,7 @@ async def list_outputs(simulation_id: str) -> OutputList:
 )
 async def get_output(simulation_id: str, name: str) -> RedirectResponse:
     try:
-        outputs = await anyio.to_thread.run_sync(repository.get_outputs, simulation_id)
+        outputs = await repository.get_outputs(simulation_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
@@ -193,16 +189,27 @@ async def job_events(simulation_id: str) -> StreamingResponse:
             return
 
         deadline = anyio.current_time() + SSE_MAX_DURATION
-        aconn = await psycopg.AsyncConnection.connect(
-            COMPUTE_DATABASE_URL, autocommit=True, connect_timeout=CONNECT_TIMEOUT
-        )
+        # asyncpg delivers notifications to a callback, not to an async
+        # generator, so a one-slot queue bridges the callback into this loop.
+        # It only ever carries "something changed"; the status is re-read from
+        # the row, which is what the client is actually shown.
+        wakeups: asyncio.Queue[None] = asyncio.Queue(maxsize=1)
+
+        def on_notify(
+            _connection: object, _pid: int, _channel: str, _payload: str
+        ) -> None:
+            with contextlib.suppress(asyncio.QueueFull):
+                wakeups.put_nowait(None)
+
+        # Deliberately not a pooled connection: a stream can hold this for
+        # SSE_MAX_DURATION, and a handful of watchers would drain the pool
+        # every other route shares.
+        connection = await db.connect()
         try:
-            await aconn.execute(f"LISTEN {channel}")
+            await connection.add_listener(channel, on_notify)
             last = job_status
             while anyio.current_time() < deadline:
-                notified = False
-                async for _ in aconn.notifies(timeout=_KEEPALIVE_SECONDS, stop_after=1):
-                    notified = True
+                notified = await _wait_for_notification(wakeups)
 
                 # Read on every tick to cover notifications that race the wait.
                 job_status = await _job_status(simulation_id)
@@ -214,7 +221,7 @@ async def job_events(simulation_id: str) -> StreamingResponse:
                 elif not notified:
                     yield ": keepalive\n\n"
         finally:
-            await aconn.close()
+            await connection.close()
 
     return StreamingResponse(
         stream(),
@@ -223,9 +230,22 @@ async def job_events(simulation_id: str) -> StreamingResponse:
     )
 
 
+async def _wait_for_notification(wakeups: asyncio.Queue[None]) -> bool:
+    """Wait for one notification, or report the keepalive timeout instead."""
+    try:
+        async with asyncio.timeout(_KEEPALIVE_SECONDS):
+            await wakeups.get()
+    except TimeoutError:
+        return False
+    # Collapse a burst: one re-read covers every notification behind it.
+    while not wakeups.empty():
+        wakeups.get_nowait()
+    return True
+
+
 async def _job_status(simulation_id: str) -> dict[str, Any]:
     try:
-        return await anyio.to_thread.run_sync(repository.get_job_status, simulation_id)
+        return await repository.get_job_status(simulation_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
