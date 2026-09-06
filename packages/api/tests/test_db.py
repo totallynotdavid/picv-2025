@@ -117,6 +117,79 @@ def test_notify_channel_is_a_bare_identifier_per_job() -> None:
     assert db.notify_channel(uuid.uuid4()) != channel
 
 
+def test_role_database_url_swaps_only_the_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "COMPUTE_DATABASE_URL",
+        "postgresql://owner:secret@db.internal:5432/tsdhn",
+    )
+
+    url = settings.role_database_url("tsdhn_producer", "p@ss word")
+
+    assert url == "postgresql://tsdhn_producer:p%40ss%20word@db.internal:5432/tsdhn"
+
+
+@pytest.mark.parametrize(
+    ("database_url", "expected"),
+    [
+        (
+            "postgresql:///tsdhn?host=/var/run/postgresql",
+            "postgresql://tsdhn_worker:secret@/tsdhn?host=/var/run/postgresql",
+        ),
+        (
+            "postgresql://owner:old@db1:5432,db2:5432/tsdhn",
+            "postgresql://tsdhn_worker:secret@db1:5432,db2:5432/tsdhn",
+        ),
+    ],
+)
+def test_role_database_url_preserves_asyncpg_dsn_authorities(
+    monkeypatch: pytest.MonkeyPatch, database_url: str, expected: str
+) -> None:
+    monkeypatch.setattr(settings, "COMPUTE_DATABASE_URL", database_url)
+
+    assert settings.role_database_url("tsdhn_worker", "secret") == expected
+
+
+def test_an_unprovisioned_role_leaves_the_caller_on_the_owner_connection() -> None:
+    assert settings.role_database_url("tsdhn_producer", "") is None
+    assert settings.role_database_url("", "secret") is None
+
+
+def test_runtime_dsn_warns_when_a_role_is_unprovisioned(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level("WARNING"):
+        assert db.runtime_dsn("tsdhn_producer", "") is None
+
+    assert "tsdhn_producer" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_connect_reuses_the_dsn_the_pool_was_opened_with(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[str] = []
+
+    async def create_pool(dsn: str, **_kwargs: Any) -> object:
+        return object()
+
+    async def connect(dsn: str, **_kwargs: Any) -> object:
+        seen.append(dsn)
+        return object()
+
+    monkeypatch.setattr(db_module.asyncpg, "create_pool", create_pool)
+    monkeypatch.setattr(db_module.asyncpg, "connect", connect)
+    monkeypatch.setattr(db_module, "_pool", None)
+    monkeypatch.setattr(db_module, "_dsn", None)
+
+    await db.open_pool(min_size=0, max_size=1, dsn="postgresql://role:pw@host/db")
+    await db.connect()
+
+    assert seen == ["postgresql://role:pw@host/db"]
+
+
 class _Connection:
     """A connection that reports whether it is closed, like asyncpg's."""
 

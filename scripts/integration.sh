@@ -7,6 +7,13 @@ database_name="tsdhn_integration_$(date +%s)_$$"
 app_role="${database_name}_role"
 app_password="tsdhn-web-test-password"
 queue_schema="${COMPUTE_QUEUE_SCHEMA:-task_queue}"
+queue_name="${COMPUTE_QUEUE:-simulations}"
+
+# Roles are cluster-wide, so each disposable database gets unique role names.
+producer_role="${database_name}_producer"
+worker_role="${database_name}_worker"
+purger_role="${database_name}_purger"
+queue_password="tsdhn-queue-test-password"
 
 case "${1:-}" in
     "") coverage=0 ;;
@@ -36,7 +43,10 @@ cleanup() {
     uv run python -m scripts.database drop \
         --base-url "$base_url" \
         --name "$database_name" \
-        --role "$app_role" >/dev/null
+        --role "$app_role" \
+        --role "$producer_role" \
+        --role "$worker_role" \
+        --role "$purger_role" >/dev/null
 }
 trap cleanup EXIT
 
@@ -46,6 +56,17 @@ APP_DB_PASSWORD="$app_password" \
 uv run tsdhn-compute-migrate
 
 uv run rqueue --database-url "$admin_url" --schema "$queue_schema" migrate
+
+COMPUTE_DATABASE_URL="$admin_url" \
+COMPUTE_QUEUE="$queue_name" \
+COMPUTE_QUEUE_SCHEMA="$queue_schema" \
+COMPUTE_PRODUCER_ROLE="$producer_role" \
+COMPUTE_PRODUCER_PASSWORD="$queue_password" \
+COMPUTE_WORKER_ROLE="$worker_role" \
+COMPUTE_WORKER_PASSWORD="$queue_password" \
+COMPUTE_PURGER_ROLE="$purger_role" \
+COMPUTE_PURGER_PASSWORD="$queue_password" \
+uv run tsdhn-queue-grants
 
 # Schema changes run with the database-owner connection. The app role below
 # is intentionally limited to runtime DML and compute-state reads.

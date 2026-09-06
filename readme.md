@@ -25,8 +25,9 @@ uv run tsdhn doctor
 uv run tsdhn calc --mw 8.0 --lat -20.5 --lon -70.5
 ```
 
-Create `.env`, set `COMPUTE_API_TOKEN`, `BETTER_AUTH_SECRET`, and
-`APP_DB_PASSWORD`, then run the self-hosted stack:
+Create `.env` and fill in `COMPUTE_API_TOKEN`, `BETTER_AUTH_SECRET`,
+`APP_DB_PASSWORD`, and the three queue-role passwords it lists, then run the
+self-hosted stack:
 
 ```sh
 cp .env.example .env

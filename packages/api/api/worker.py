@@ -3,14 +3,22 @@ import logging
 import os
 import signal
 import socket
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
+import asyncpg
 import numba
-from rqueue import Worker
+from rqueue import Admin, Worker
 
 from api.core import db
 from api.core.queue import build_queue
 from api.core.settings import (
+    COMPUTE_PURGER_PASSWORD,
+    COMPUTE_PURGER_ROLE,
     COMPUTE_QUEUE,
+    COMPUTE_QUEUE_SCHEMA,
+    COMPUTE_WORKER_PASSWORD,
+    COMPUTE_WORKER_ROLE,
     LOG_LEVEL,
     NUMBA_THREADS,
     WORKER_CONCURRENCY,
@@ -20,6 +28,7 @@ from api.core.settings import (
 )
 from api.core.tasks import (
     register_tasks,
+    run_periodic_purge,
     run_periodic_reconcile,
     run_periodic_sweep,
 )
@@ -42,9 +51,35 @@ def worker_id() -> str:
     return f"tsdhn-worker-{host or 'unknown'}-{os.getpid()}"[:128]
 
 
+@asynccontextmanager
+async def purge_pool() -> AsyncIterator[asyncpg.Pool]:
+    """Yield the pool used by retention, separately credentialed from consume.
+
+    When the purger role is not configured, retain the same development
+    fallback as ``db.open_pool``: a separate owner-DSN pool. Reusing the worker
+    pool here would use the CONSUME role, which intentionally cannot delete
+    queue jobs.
+    """
+    dsn = db.runtime_dsn(COMPUTE_PURGER_ROLE, COMPUTE_PURGER_PASSWORD)
+    fallback_dsn = dsn or db.COMPUTE_DATABASE_URL
+    # Retention is hourly, so one lazy connection is enough. It is always a
+    # separate pool, including the owner fallback above.
+    pool = await asyncpg.create_pool(
+        fallback_dsn, min_size=0, max_size=1, timeout=db.CONNECT_TIMEOUT
+    )
+    try:
+        yield pool
+    finally:
+        await pool.close()
+
+
 async def run() -> None:
     min_size, max_size = worker_pool_size()
-    pool = await db.open_pool(min_size=min_size, max_size=max_size)
+    pool = await db.open_pool(
+        min_size=min_size,
+        max_size=max_size,
+        dsn=db.runtime_dsn(COMPUTE_WORKER_ROLE, COMPUTE_WORKER_PASSWORD),
+    )
     try:
         worker = Worker(
             register_tasks(build_queue(pool)),
@@ -69,22 +104,27 @@ async def run() -> None:
             # here; in practice the orchestrator's own SIGKILL bounds it.
             loop.add_signal_handler(received, worker.stop)
 
-        # The worker process owns maintenance because it is the process that
-        # owns recovery: reconciliation exists to repair the compute.jobs rows
-        # rqueue's own lease recovery leaves behind.
         stop_maintenance = asyncio.Event()
-        maintenance = [
-            asyncio.create_task(run_periodic_sweep(stop_maintenance)),
-            asyncio.create_task(run_periodic_reconcile(stop_maintenance)),
-        ]
         logger.info("simulation worker serving queue %s", COMPUTE_QUEUE)
-        try:
-            await worker.run()
-        finally:
-            stop_maintenance.set()
-            for task in maintenance:
-                task.cancel()
-            await asyncio.gather(*maintenance, return_exceptions=True)
+        async with purge_pool() as retention_pool:
+            maintenance = [
+                asyncio.create_task(run_periodic_sweep(stop_maintenance)),
+                asyncio.create_task(run_periodic_reconcile(stop_maintenance)),
+                asyncio.create_task(
+                    run_periodic_purge(
+                        Admin(retention_pool, schema=COMPUTE_QUEUE_SCHEMA),
+                        stop_maintenance,
+                        compute_pool=pool,
+                    )
+                ),
+            ]
+            try:
+                await worker.run()
+            finally:
+                stop_maintenance.set()
+                for task in maintenance:
+                    task.cancel()
+                await asyncio.gather(*maintenance, return_exceptions=True)
     finally:
         await db.close_pool()
 

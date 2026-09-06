@@ -4,7 +4,7 @@ import asyncio
 import threading
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from rqueue import PermanentFailure, TaskContext
@@ -370,6 +370,81 @@ async def test_the_periodic_sweep_keeps_running_after_a_failed_pass(
     await tasks.run_periodic_sweep(stop, interval=0.01)
 
     assert len(passes) == 2
+
+
+@pytest.mark.asyncio
+async def test_the_periodic_purge_keeps_running_after_a_failed_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    passes: list[int] = []
+    stop = asyncio.Event()
+
+    async def purge(_admin: Any, *, compute_pool: Any = None) -> int:
+        passes.append(len(passes))
+        if len(passes) == 1:
+            raise RuntimeError("purge role is not provisioned")
+        stop.set()
+        return 3
+
+    monkeypatch.setattr(tasks, "purge_finished_jobs", purge)
+
+    await tasks.run_periodic_purge(cast(Any, object()), stop, interval=0.01)
+
+    assert len(passes) == 2
+
+
+@pytest.mark.asyncio
+async def test_purge_checks_compute_state_before_deleting_queue_rows() -> None:
+    job_id = uuid.uuid4()
+    queries: list[tuple[str, tuple[Any, ...]]] = []
+
+    class _Connection:
+        async def fetch(self, query: str, *args: Any) -> list[dict[str, Any]]:
+            queries.append((query, args))
+            return [{"id": job_id}]
+
+        async def fetchval(self, query: str, *args: Any) -> int:
+            queries.append((query, args))
+            return 1
+
+    class _Acquire:
+        def __init__(self, connection: _Connection) -> None:
+            self.connection = connection
+
+        async def __aenter__(self) -> _Connection:
+            return self.connection
+
+        async def __aexit__(self, *_exc: object) -> None:
+            return None
+
+    class _Pool:
+        def __init__(self, connection: _Connection) -> None:
+            self.connection = connection
+
+        def acquire(self) -> _Acquire:
+            return _Acquire(self.connection)
+
+    class _Admin:
+        schema = "task_queue"
+
+        def __init__(self, pool: _Pool) -> None:
+            self.pool = pool
+
+    pool = _Pool(_Connection())
+    removed = await tasks.purge_finished_jobs(
+        cast(Any, _Admin(pool)), compute_pool=cast(Any, pool)
+    )
+
+    assert removed == 1
+    assert len(queries) == 2
+    assert "JOIN compute.jobs" in queries[0][0]
+    assert queries[0][1][0] == COMPUTE_QUEUE
+    assert queries[0][1][-1] == tasks.PURGE_LIMIT
+    assert "DELETE FROM task_queue.jobs" in queries[1][0]
+    assert "state = ANY($3::text[])" in queries[1][0]
+    assert "finished_at < $4" in queries[1][0]
+    assert queries[1][1][0] == [job_id]
+    assert queries[1][1][1] == COMPUTE_QUEUE
 
 
 @pytest.mark.asyncio

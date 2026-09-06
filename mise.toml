@@ -156,6 +156,7 @@ depends = ["db:start"]
 run = [
   "uv run tsdhn-compute-migrate",
   "uv run rqueue --database-url \"${COMPUTE_DATABASE_URL:-postgresql://tsdhn:tsdhn@127.0.0.1:5432/tsdhn}\" --schema \"${COMPUTE_QUEUE_SCHEMA:-task_queue}\" migrate",
+  "uv run tsdhn-queue-grants",
   "DATABASE_URL=\"${COMPUTE_DATABASE_URL:-postgresql://tsdhn:tsdhn@127.0.0.1:5432/tsdhn}\" bun --filter web db:migrate",
   "uv run tsdhn-web-grants",
 ]
