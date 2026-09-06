@@ -89,29 +89,41 @@ import shutil
 import threading
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import asyncpg
-from rqueue import CancelJob, Job, PermanentFailure, Queue, RetryPolicy, TaskContext
+from rqueue import (
+    Admin,
+    CancelJob,
+    Job,
+    PermanentFailure,
+    Queue,
+    RetryPolicy,
+    TaskContext,
+)
+from rqueue.models import TERMINAL_STATES
 
 from api.core import db, repository
 from api.core.errors import TransientInfraError
 from api.core.queue import get_queue
-from api.core.settings import JOBS_DIR
+from api.core.settings import COMPUTE_QUEUE, JOBS_DIR
 from tsdhn.domain import EarthquakeInput, JobStatus
 from tsdhn.engine import run_simulation
 
 __all__ = [
+    "JOB_RETENTION",
     "MAX_ATTEMPTS",
     "RUN_SIMULATION",
     "TRANSIENT_RETRY",
     "AbandonedAttempt",
     "decode_payload",
     "enqueue_simulation",
+    "purge_finished_jobs",
     "reconcile_terminal_jobs",
     "register_tasks",
+    "run_periodic_purge",
     "run_periodic_reconcile",
     "run_periodic_sweep",
     "run_simulation_task",
@@ -178,6 +190,28 @@ RECONCILE_GRACE = timedelta(minutes=5)
 # this often is cheap; the stuck window is then bounded by the lease duration
 # plus the grace, not by the interval.
 RECONCILE_INTERVAL_SECONDS = 60.0
+
+# A terminal queue row has no application value after the handler records its
+# outcome. Keep the queue-side attempt history for a working week plus the
+# weekend, while leaving compute.jobs (the result record) untouched.
+JOB_RETENTION = timedelta(days=7)
+PURGE_INTERVAL_SECONDS = 3600.0
+
+# Bound each purge transaction so a first run against a long-unpurged table
+# does not hold one enormous delete open; the next hourly pass takes the rest.
+PURGE_LIMIT = 10000
+
+# `compute.jobs` uses application states rather than rqueue's states. A queue
+# row is safe to remove only after reconciliation (or the simulation itself)
+# has recorded one of these terminal outcomes on its compute counterpart.
+COMPUTE_TERMINAL_STATUSES = (
+    JobStatus.COMPLETED.value,
+    JobStatus.FAILED.value,
+)
+
+# The cast below is protected by a materialized CTE and this canonical UUID
+# check, just as repository reconciliation protects its own payload cast.
+COMPUTE_JOB_ID_RE = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 
 
 def decode_payload(payload: Any) -> uuid.UUID:
@@ -546,6 +580,92 @@ async def sweep_abandoned_work_dirs() -> None:
         await asyncio.to_thread(remove_workspace, JOBS_DIR / simulation_id)
 
 
+async def _eligible_queue_job_ids(
+    admin: Admin, compute_pool: asyncpg.Pool, cutoff: datetime
+) -> list[uuid.UUID]:
+    """Find old queue rows whose compute records are already terminal.
+
+    The check runs through the worker pool, which can read both schemas. The
+    purger role deliberately cannot read ``compute.jobs``; it only performs
+    the final DELETE after this join has selected safe queue rows. Invalid
+    payloads and missing/nonterminal compute rows are conservatively skipped.
+    """
+    async with compute_pool.acquire() as connection:
+        rows = await connection.fetch(
+            f"""
+            WITH candidates AS MATERIALIZED (
+                SELECT q.id,
+                       (q.payload->>'compute_job_id')::uuid AS compute_job_id,
+                       q.finished_at
+                FROM {admin.schema}.jobs AS q
+                WHERE q.queue = $1
+                  AND q.state = ANY($2::text[])
+                  AND q.finished_at < $3
+                  AND q.payload->>'compute_job_id' ~* $4
+            )
+            SELECT candidates.id
+            FROM candidates
+            JOIN compute.jobs AS c ON c.id = candidates.compute_job_id
+            WHERE c.status = ANY($5::text[])
+            ORDER BY candidates.finished_at
+            LIMIT $6
+            """,  # noqa: S608 - admin.schema is validated by rqueue
+            COMPUTE_QUEUE,
+            list(TERMINAL_STATES),
+            cutoff,
+            COMPUTE_JOB_ID_RE,
+            list(COMPUTE_TERMINAL_STATUSES),
+            PURGE_LIMIT,
+        )
+    return [row["id"] for row in rows]
+
+
+async def _delete_queue_job_ids(
+    admin: Admin, job_ids: list[uuid.UUID], cutoff: datetime
+) -> int:
+    """Delete the prechecked queue rows using the separately scoped role."""
+    if not job_ids:
+        return 0
+    async with admin.pool.acquire() as connection:
+        # The purger has DELETE on jobs and the cascade removes queue history.
+        # A single statement keeps the selected IDs' deletion atomic.
+        removed: int = await connection.fetchval(
+            f"""
+            WITH removed AS (
+                DELETE FROM {admin.schema}.jobs
+                WHERE id = ANY($1::uuid[])
+                  AND queue = $2
+                  AND state = ANY($3::text[])
+                  AND finished_at < $4
+                RETURNING id
+            )
+            SELECT count(*)::int FROM removed
+            """,  # noqa: S608 - admin.schema is validated by rqueue
+            job_ids,
+            COMPUTE_QUEUE,
+            list(TERMINAL_STATES),
+            cutoff,
+        )
+    return removed
+
+
+async def purge_finished_jobs(
+    admin: Admin, *, compute_pool: asyncpg.Pool | None = None
+) -> int:
+    """Delete old queue rows only after their compute jobs are terminal.
+
+    ``Admin.purge`` cannot express the cross-schema safety join, so retention
+    first checks candidates using the worker's compute-readable pool and then
+    deletes the selected queue IDs using the purger pool. A compute row that is
+    still pending or running remains paired with its queue evidence for the
+    next reconciliation pass.
+    """
+    compute_pool = compute_pool or db.get_pool()
+    cutoff = datetime.now(UTC) - JOB_RETENTION
+    job_ids = await _eligible_queue_job_ids(admin, compute_pool, cutoff)
+    return await _delete_queue_job_ids(admin, job_ids, cutoff)
+
+
 async def reconcile_terminal_jobs(*, grace: timedelta = RECONCILE_GRACE) -> None:
     """Sync compute.jobs to jobs the queue finished without the run reporting.
 
@@ -616,6 +736,32 @@ async def run_periodic_reconcile(
     await _run_periodically(
         "Reconciliation of queue-terminal jobs",
         lambda: reconcile_terminal_jobs(),
+        stop,
+        interval,
+    )
+
+
+async def run_periodic_purge(
+    admin: Admin,
+    stop: asyncio.Event,
+    *,
+    compute_pool: asyncpg.Pool | None = None,
+    interval: float = PURGE_INTERVAL_SECONDS,
+) -> None:
+    """Purge finished queue rows until ``stop`` is set."""
+
+    async def purge() -> None:
+        removed = await purge_finished_jobs(admin, compute_pool=compute_pool)
+        if removed:
+            logger.info(
+                "purged %d finished queue job(s) older than %s",
+                removed,
+                JOB_RETENTION,
+            )
+
+    await _run_periodically(
+        "Purge of finished queue jobs",
+        purge,
         stop,
         interval,
     )

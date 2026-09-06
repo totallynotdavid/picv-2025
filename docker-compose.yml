@@ -114,6 +114,10 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-tsdhn-results}
       TSDHN_MODEL_DIR: /app/model
       TSDHN_JOBS_DIR: /var/tmp/jobs
+      COMPUTE_WORKER_ROLE: ${COMPUTE_WORKER_ROLE:-tsdhn_worker}
+      COMPUTE_WORKER_PASSWORD: ${COMPUTE_WORKER_PASSWORD:?set COMPUTE_WORKER_PASSWORD in .env}
+      COMPUTE_PURGER_ROLE: ${COMPUTE_PURGER_ROLE:-tsdhn_purger}
+      COMPUTE_PURGER_PASSWORD: ${COMPUTE_PURGER_PASSWORD:?set COMPUTE_PURGER_PASSWORD in .env}
     command: ["uv", "run", "--no-dev", "tsdhn-worker"]
     volumes:
       - jobs-data:/var/tmp/jobs

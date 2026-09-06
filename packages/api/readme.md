@@ -18,25 +18,32 @@ uv run tsdhn-api
 uv run tsdhn-worker
 ```
 
-Create the compute and queue tables before starting the API or worker.
-`tsdhn-compute-migrate` also provisions the web application's database role, so
-it needs a password for that role; there is no default, because a default
-password is worse than an error:
+Create the compute and queue tables before starting the API or worker. The
+migration connection is the schema owner; runtime processes use three roles
+with separate passwords from `.env`:
 
 ```sh
-export APP_DB_PASSWORD="$(openssl rand -hex 32)"   # or set it in .env
-
 uv run tsdhn-compute-migrate
 uv run rqueue \
   --database-url "${COMPUTE_DATABASE_URL:-postgresql://tsdhn:tsdhn@localhost:5432/tsdhn}" \
   --schema "${COMPUTE_QUEUE_SCHEMA:-task_queue}" \
   migrate
+uv run tsdhn-queue-grants
 ```
 
-Everything else defaults to the values `api/core/settings.py` uses, so with
-`APP_DB_PASSWORD` set the block works on a fresh clone with nothing else
-exported. `rqueue`'s CLI reads `RQUEUE_DATABASE_URL`, not
-`COMPUTE_DATABASE_URL`, which is why the URL is passed explicitly.
+`tsdhn-compute-migrate` also provisions the web application's database role, so
+set `APP_DB_PASSWORD` alongside `COMPUTE_PRODUCER_PASSWORD`,
+`COMPUTE_WORKER_PASSWORD`, and `COMPUTE_PURGER_PASSWORD` before running these
+commands. `tsdhn-queue-grants` provisions the API producer, worker consumer,
+and retention purger roles.
+`COMPUTE_DATABASE_URL` remains the owner URL used only for migrations and
+grants. If a runtime role password is absent, that process warns and falls
+back to the owner URL so an unprovisioned development database can still start;
+the worker's retention path opens its own owner-URL pool rather than reusing
+the consumer pool.
+
+`rqueue`'s CLI reads `RQUEUE_DATABASE_URL`, not `COMPUTE_DATABASE_URL`, which is
+why the URL is passed explicitly.
 
 `rqueue` owns the queue tables and their migrations; `--schema` is a global
 flag, before the subcommand. They live in `COMPUTE_QUEUE_SCHEMA` (default
@@ -72,8 +79,10 @@ download flows.
 - `api/core/db.py` owns the process-wide asyncpg pool.
 - `api/migrate.py` and `api/web_grants.py` apply the database changes described
   in `DEPLOY.md`; `rqueue migrate` applies the queue's own.
-- `api/worker.py` starts an `rqueue.Worker` for the configured queue and the
-  periodic workspace sweep.
+- `api/queue_grants.py` provisions the least-privilege queue roles and their
+  `compute.jobs` grants.
+- `api/worker.py` starts an `rqueue.Worker` for the configured queue, the
+  periodic workspace sweep, and the hourly queue-retention purge.
 
 ## Tests
 

@@ -103,6 +103,31 @@ The web runtime role can read and write the web tables and read
 changes. The table definition in `apps/web/src/lib/server/db/compute.ts` is
 used only for reads and is excluded from web migrations.
 
+The compute service has three restricted runtime roles, provisioned after the
+compute and queue migrations by `tsdhn-queue-grants`. None can run schema
+changes, and row-level security scopes each to the deployment's queue:
+
+| Role | Process | Queue capability | `compute.jobs` |
+| --- | --- | --- | --- |
+| `COMPUTE_PRODUCER_ROLE` | API | enqueue and read (`PRODUCE`) | `SELECT`, `INSERT` |
+| `COMPUTE_WORKER_ROLE` | worker | claim and transition (`CONSUME`) | `SELECT`, `UPDATE` |
+| `COMPUTE_PURGER_ROLE` | worker retention | inspect plus delete queue jobs | none |
+
+The producer cannot claim a job, the worker cannot delete one, and the purger
+cannot reach `compute.jobs`. Deleting a queue job cascades to its attempt
+history, so retention uses its own credential rather than the consumer role.
+
+## Queue retention
+
+Terminal `task_queue.jobs` rows whose matching `compute.jobs` row is also
+terminal are deleted after seven days by an hourly pass in the worker process.
+Rows whose compute counterpart is still running, missing, or malformed remain
+available for reconciliation. The queue row has no application value once the
+handler records the outcome; the week preserves attempt history for operational
+inspection over a working week and weekend. Attempt and occurrence rows follow
+through `ON DELETE CASCADE`. `compute.jobs` is not purged because it holds the
+simulation result record.
+
 ## Identifiers
 
 | Name | Owner | Purpose |
