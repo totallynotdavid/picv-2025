@@ -44,14 +44,21 @@ services:
         condition: service_healthy
     environment:
       COMPUTE_DATABASE_URL: postgresql://tsdhn:tsdhn@postgres:5432/tsdhn
+      COMPUTE_QUEUE: ${COMPUTE_QUEUE:-simulations}
       COMPUTE_QUEUE_SCHEMA: ${COMPUTE_QUEUE_SCHEMA:-task_queue}
       APP_DB_ROLE: ${APP_DB_ROLE:-tsdhn_app}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in .env}
+      COMPUTE_PRODUCER_ROLE: ${COMPUTE_PRODUCER_ROLE:-tsdhn_producer}
+      COMPUTE_PRODUCER_PASSWORD: ${COMPUTE_PRODUCER_PASSWORD:?set COMPUTE_PRODUCER_PASSWORD in .env}
+      COMPUTE_WORKER_ROLE: ${COMPUTE_WORKER_ROLE:-tsdhn_worker}
+      COMPUTE_WORKER_PASSWORD: ${COMPUTE_WORKER_PASSWORD:?set COMPUTE_WORKER_PASSWORD in .env}
+      COMPUTE_PURGER_ROLE: ${COMPUTE_PURGER_ROLE:-tsdhn_purger}
+      COMPUTE_PURGER_PASSWORD: ${COMPUTE_PURGER_PASSWORD:?set COMPUTE_PURGER_PASSWORD in .env}
     command:
       [
         "sh",
         "-lc",
-        "uv run --no-dev tsdhn-compute-migrate && uv run --no-dev rqueue --database-url \"$$COMPUTE_DATABASE_URL\" --schema \"$$COMPUTE_QUEUE_SCHEMA\" migrate",
+        "uv run --no-dev tsdhn-compute-migrate && uv run --no-dev rqueue --database-url \"$$COMPUTE_DATABASE_URL\" --schema \"$$COMPUTE_QUEUE_SCHEMA\" migrate && uv run --no-dev tsdhn-queue-grants",
       ]
     restart: "no"
 
@@ -79,6 +86,8 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET:-tsdhn-results}
       COMPUTE_API_TOKEN: ${COMPUTE_API_TOKEN:?set COMPUTE_API_TOKEN in .env}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      COMPUTE_PRODUCER_ROLE: ${COMPUTE_PRODUCER_ROLE:-tsdhn_producer}
+      COMPUTE_PRODUCER_PASSWORD: ${COMPUTE_PRODUCER_PASSWORD:?set COMPUTE_PRODUCER_PASSWORD in .env}
     ports:
       - "8000:8000"
 

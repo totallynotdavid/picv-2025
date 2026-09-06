@@ -10,7 +10,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from api import __version__
 from api.core import db
 from api.core.queue import build_queue
-from api.core.settings import LOG_LEVEL, api_pool_size
+from api.core.settings import (
+    COMPUTE_PRODUCER_PASSWORD,
+    COMPUTE_PRODUCER_ROLE,
+    LOG_LEVEL,
+    api_pool_size,
+)
 from api.core.tasks import register_tasks
 from api.routes import get_calculator, ops_router, router
 
@@ -27,7 +32,11 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     get_calculator()
     min_size, max_size = api_pool_size()
     # A zero floor keeps this from waiting on Postgres to start.
-    pool = await db.open_pool(min_size=min_size, max_size=max_size)
+    pool = await db.open_pool(
+        min_size=min_size,
+        max_size=max_size,
+        dsn=db.runtime_dsn(COMPUTE_PRODUCER_ROLE, COMPUTE_PRODUCER_PASSWORD),
+    )
     register_tasks(build_queue(pool))
     logger.info("TSDHN API ready")
     try:

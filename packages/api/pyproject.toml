@@ -25,6 +25,7 @@ tsdhn-api = "api.main:start_app"
 tsdhn-worker = "api.worker:main"
 tsdhn-compute-migrate = "api.migrate:main"
 tsdhn-web-grants = "api.web_grants:main"
+tsdhn-queue-grants = "api.queue_grants:main"
 
 [build-system]
 requires = ["uv_build==0.11.28"]

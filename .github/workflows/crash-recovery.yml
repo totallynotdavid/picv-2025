@@ -20,6 +20,9 @@ jobs:
         env:
             COMPUTE_API_TOKEN: compose-e2e-token
             APP_DB_PASSWORD: compose-e2e-app-db-password
+            COMPUTE_PRODUCER_PASSWORD: compose-e2e-producer-password
+            COMPUTE_WORKER_PASSWORD: compose-e2e-worker-password
+            COMPUTE_PURGER_PASSWORD: compose-e2e-purger-password
             BETTER_AUTH_SECRET: compose-e2e-better-auth-secret
             ORIGIN: http://localhost:3000
             MINIO_ACCESS_KEY: minioadmin

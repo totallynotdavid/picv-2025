@@ -78,9 +78,18 @@ def drop_database(base_url: str, name: str) -> None:
 
 
 def drop_role(base_url: str, role: str) -> None:
-    """Remove a role created for an isolated integration run."""
+    """Remove a role created for an isolated integration run.
+
+    Cleanup also runs when provisioning failed before the role was created;
+    ``DROP OWNED BY`` has no ``IF EXISTS`` form.
+    """
     target = database_target(base_url, role)
     with psycopg.connect(target.maintenance_url, autocommit=True) as connection:
+        exists = connection.execute(
+            "SELECT 1 FROM pg_roles WHERE rolname = %s", [role]
+        ).fetchone()
+        if exists is None:
+            return
         identifier = sql.Identifier(role)
         connection.execute(sql.SQL("DROP OWNED BY {}").format(identifier))
         connection.execute(sql.SQL("DROP ROLE IF EXISTS {}").format(identifier))
@@ -103,7 +112,7 @@ def main() -> None:
     drop = subparsers.add_parser("drop")
     drop.add_argument("--base-url", required=True)
     drop.add_argument("--name", required=True)
-    drop.add_argument("--role")
+    drop.add_argument("--role", action="append", default=[])
 
     args = parser.parse_args()
     if args.command == "create":
@@ -119,8 +128,8 @@ def main() -> None:
         )
     else:
         drop_database(args.base_url, args.name)
-        if args.role:
-            drop_role(args.base_url, args.role)
+        for role in args.role:
+            drop_role(args.base_url, role)
 
 
 if __name__ == "__main__":
