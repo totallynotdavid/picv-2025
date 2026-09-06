@@ -685,3 +685,30 @@ def test_a_held_workspace_is_left_for_the_next_sweep(tmp_path: Path) -> None:
     claim.release()
     assert tasks.remove_workspace(work_dir) is True
     assert not work_dir.exists()
+
+
+@pytest.mark.asyncio
+async def test_sweep_retries_a_completed_workspace_after_lock_race(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    simulation_id = str(uuid.uuid4())
+    work_dir = tmp_path / simulation_id
+    work_dir.mkdir()
+    claim, _resume = tasks.claim_workspace(work_dir, 1)
+
+    async def list_terminal_work_dirs(_cutoff: Any) -> list[str]:
+        # The repository query includes completed jobs as well as failed ones.
+        return [simulation_id]
+
+    monkeypatch.setattr(
+        tasks_module.repository, "list_abandoned_work_dirs", list_terminal_work_dirs
+    )
+    monkeypatch.setattr(tasks_module, "JOBS_DIR", tmp_path)
+
+    await tasks.sweep_abandoned_work_dirs()
+    assert work_dir.exists()
+
+    claim.release()
+    claim.release()
+    await tasks.sweep_abandoned_work_dirs()
+    assert not work_dir.exists()

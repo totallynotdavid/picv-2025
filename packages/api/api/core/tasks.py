@@ -155,7 +155,7 @@ RUN_TIMEOUT_SECONDS: float | None = None
 # starts without resuming, which would take the lock with it.
 WORKSPACE_LOCK_SUFFIX = ".lock"
 
-# Keep failed workspaces for local inspection and manual recovery.
+# Keep terminal workspaces for local inspection and manual recovery.
 WORK_DIR_TTL = timedelta(hours=24)
 SWEEP_INTERVAL_SECONDS = 3600.0
 
@@ -584,7 +584,7 @@ async def _record_failure(
 
 
 async def sweep_abandoned_work_dirs() -> None:
-    """Delete the workspaces of jobs that failed longer than WORK_DIR_TTL ago."""
+    """Delete terminal-job workspaces older than WORK_DIR_TTL."""
     cutoff = datetime.now().astimezone() - WORK_DIR_TTL
     for simulation_id in await repository.list_abandoned_work_dirs(cutoff):
         await asyncio.to_thread(remove_workspace, JOBS_DIR / simulation_id)
