@@ -527,6 +527,70 @@ def test_releasing_a_claim_more_than_twice_is_harmless(tmp_path: Path) -> None:
         claim.release()
 
 
+@pytest.mark.parametrize("operation", ["ftruncate", "write"])
+def test_claim_closes_fd_when_lock_setup_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, operation: str
+) -> None:
+    work_dir = tmp_path / "sim"
+    original = getattr(tasks_module.os, operation)
+
+    def fail(*_args: Any) -> None:
+        raise OSError(f"{operation} failed")
+
+    monkeypatch.setattr(tasks_module.os, operation, fail)
+    with pytest.raises(OSError, match=f"{operation} failed"):
+        tasks.claim_workspace(work_dir, 1)
+
+    # If the descriptor leaked, this second claim would still be refused by
+    # the flock even though the first call never returned a claim.
+    monkeypatch.setattr(tasks_module.os, operation, original)
+    claim, _resume = tasks.claim_workspace(work_dir, 2)
+    claim.release()
+    claim.release()
+
+
+@pytest.mark.asyncio
+async def test_cancelled_claim_handoff_releases_a_claim_it_never_received(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    work_dir = tmp_path / "sim"
+    claimed = threading.Event()
+    release = threading.Event()
+    original = tasks.claim_workspace
+
+    def claim_then_pause(
+        current_work_dir: Path, attempt: int
+    ) -> tuple[tasks.WorkspaceClaim, bool]:
+        result = original(current_work_dir, attempt)
+        claimed.set()
+        release.wait(5)
+        return result
+
+    monkeypatch.setattr(tasks_module, "claim_workspace", claim_then_pause)
+    task = asyncio.create_task(tasks_module._claim_workspace_safely(work_dir, 1))
+    assert await asyncio.to_thread(claimed.wait, 5)
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    # The background thread returns the already-acquired claim after the
+    # cancellation. The helper's detached drain owns and releases both shares.
+    monkeypatch.setattr(tasks_module, "claim_workspace", original)
+    release.set()
+    for _ in range(100):
+        try:
+            next_claim, _resume = tasks_module.claim_workspace(work_dir, 2)
+        except TransientInfraError:
+            await asyncio.sleep(0.01)
+        else:
+            next_claim.release()
+            next_claim.release()
+            break
+    else:
+        pytest.fail("cancelled claim handoff kept the workspace locked")
+
+
 @pytest.mark.asyncio
 async def test_a_cancelled_attempt_keeps_holding_its_workspace(
     worker_job: tuple[uuid.UUID, uuid.UUID, Path],
@@ -620,4 +684,31 @@ def test_a_held_workspace_is_left_for_the_next_sweep(tmp_path: Path) -> None:
     claim.release()
     claim.release()
     assert tasks.remove_workspace(work_dir) is True
+    assert not work_dir.exists()
+
+
+@pytest.mark.asyncio
+async def test_sweep_retries_a_completed_workspace_after_lock_race(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    simulation_id = str(uuid.uuid4())
+    work_dir = tmp_path / simulation_id
+    work_dir.mkdir()
+    claim, _resume = tasks.claim_workspace(work_dir, 1)
+
+    async def list_terminal_work_dirs(_cutoff: Any) -> list[str]:
+        # The repository query includes completed jobs as well as failed ones.
+        return [simulation_id]
+
+    monkeypatch.setattr(
+        tasks_module.repository, "list_abandoned_work_dirs", list_terminal_work_dirs
+    )
+    monkeypatch.setattr(tasks_module, "JOBS_DIR", tmp_path)
+
+    await tasks.sweep_abandoned_work_dirs()
+    assert work_dir.exists()
+
+    claim.release()
+    claim.release()
+    await tasks.sweep_abandoned_work_dirs()
     assert not work_dir.exists()

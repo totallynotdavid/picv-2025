@@ -276,13 +276,14 @@ async def test_a_notification_is_only_delivered_once_its_update_commits(
 
 
 @pytest.mark.asyncio
-async def test_list_abandoned_work_dirs_returns_only_old_failed_jobs(
+async def test_list_abandoned_work_dirs_returns_old_terminal_jobs(
     queue: Queue,
 ) -> None:
     simulation_id_text, compute_job_id = await _create_job()
     simulation_id = uuid.UUID(simulation_id_text)
     fresh_simulation_id_text, fresh_job_id = await _create_job()
     fresh_simulation_id = uuid.UUID(fresh_simulation_id_text)
+    completed_simulation_id_text, completed_job_id = await _create_job()
     cutoff = datetime.now(UTC) - timedelta(hours=24)
 
     async with db.acquire() as conn:
@@ -305,9 +306,20 @@ async def test_list_abandoned_work_dirs_returns_only_old_failed_jobs(
             cutoff - timedelta(minutes=1),
             compute_job_id,
         )
+        await conn.execute(
+            """
+            UPDATE compute.jobs
+            SET status = $1, finished_at = $2
+            WHERE id = $3
+            """,
+            "completed",
+            cutoff - timedelta(minutes=1),
+            completed_job_id,
+        )
 
     abandoned = await repository.list_abandoned_work_dirs(cutoff)
     assert simulation_id_text in abandoned
+    assert completed_simulation_id_text in abandoned
     assert fresh_simulation_id_text not in abandoned
 
 

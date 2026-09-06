@@ -155,7 +155,7 @@ RUN_TIMEOUT_SECONDS: float | None = None
 # starts without resuming, which would take the lock with it.
 WORKSPACE_LOCK_SUFFIX = ".lock"
 
-# Keep failed workspaces for local inspection and manual recovery.
+# Keep terminal workspaces for local inspection and manual recovery.
 WORK_DIR_TTL = timedelta(hours=24)
 SWEEP_INTERVAL_SECONDS = 3600.0
 
@@ -178,6 +178,10 @@ RECONCILE_GRACE = timedelta(minutes=5)
 # this often is cheap; the stuck window is then bounded by the lease duration
 # plus the grace, not by the interval.
 RECONCILE_INTERVAL_SECONDS = 60.0
+
+# Keep cancellation cleanup tasks strongly reachable until they have released
+# the claim returned by their background thread.
+_CLAIM_DRAIN_TASKS: set[asyncio.Task[None]] = set()
 
 
 def decode_payload(payload: Any) -> uuid.UUID:
@@ -270,21 +274,63 @@ def claim_workspace(work_dir: Path, attempt: int) -> tuple[WorkspaceClaim, bool]
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError as e:
-        os.close(fd)
-        # Transient on purpose: the previous attempt's thread unwinds at its
-        # next progress write, which the database fence refuses, so the
-        # workspace frees itself. rqueue's backoff is the wait.
-        raise TransientInfraError(
-            f"simulation workspace {work_dir.name} is still held by an earlier attempt"
-        ) from e
-    os.ftruncate(fd, 0)
-    os.write(fd, f"attempt {attempt}\n".encode())
-    # Evaluated under the lock: without it, "are there checkpoints to resume
-    # from" is a question about a directory someone else may be halfway
-    # through writing.
-    return WorkspaceClaim(fd), work_dir.exists()
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as e:
+            # Transient on purpose: the previous attempt's thread unwinds at
+            # its next progress write, which the database fence refuses, so
+            # the workspace frees itself. rqueue's backoff is the wait.
+            raise TransientInfraError(
+                f"simulation workspace {work_dir.name} is still held by an "
+                "earlier attempt"
+            ) from e
+        os.ftruncate(fd, 0)
+        os.write(fd, f"attempt {attempt}\n".encode())
+        # Evaluated under the lock: without it, "are there checkpoints to
+        # resume from" is a question about a directory someone else may be
+        # halfway through writing.
+        return WorkspaceClaim(fd), work_dir.exists()
+    except BaseException:
+        # Once the descriptor exists, this function owns closing it until the
+        # claim has been handed to the caller. This also covers failures after
+        # flock succeeds, such as ftruncate/write, and constructor failures.
+        with contextlib.suppress(OSError):
+            os.close(fd)
+        raise
+
+
+async def _release_unreceived_claim(
+    claim_future: asyncio.Future[tuple[WorkspaceClaim, bool]],
+) -> None:
+    """Release a claim whose thread completed after its waiter was cancelled."""
+    try:
+        claim, _resume = await claim_future
+    except BaseException:
+        return
+    claim.release()
+    claim.release()
+
+
+async def _claim_workspace_safely(
+    work_dir: Path, attempt: int
+) -> tuple[WorkspaceClaim, bool]:
+    """Claim a workspace without losing a result to cancellation.
+
+    `asyncio.to_thread` cannot stop the thread that has already acquired the
+    lock. Shielding its task lets that thread finish, while the detached drain
+    takes ownership of a returned claim if cancellation wins the handoff
+    before this coroutine receives it.
+    """
+    claim_future = asyncio.create_task(
+        asyncio.to_thread(claim_workspace, work_dir, attempt)
+    )
+    try:
+        return await asyncio.shield(claim_future)
+    except asyncio.CancelledError:
+        drain = asyncio.create_task(_release_unreceived_claim(claim_future))
+        _CLAIM_DRAIN_TASKS.add(drain)
+        drain.add_done_callback(_CLAIM_DRAIN_TASKS.discard)
+        raise
 
 
 def remove_workspace(work_dir: Path) -> bool:
@@ -402,9 +448,7 @@ async def run_simulation_task(compute_job_id: uuid.UUID, context: TaskContext) -
         # rqueue installs a ThreadPoolExecutor sized from the worker's
         # concurrency as the loop's default executor, so these hops are capacity
         # bounded without building an executor here.
-        held, resume = await asyncio.to_thread(
-            claim_workspace, work_dir, context.attempt
-        )
+        held, resume = await _claim_workspace_safely(work_dir, context.attempt)
         claim = held
         result = await asyncio.to_thread(run_kernel, held, resume)
         async with db.acquire() as conn:
@@ -540,7 +584,7 @@ async def _record_failure(
 
 
 async def sweep_abandoned_work_dirs() -> None:
-    """Delete the workspaces of jobs that failed longer than WORK_DIR_TTL ago."""
+    """Delete terminal-job workspaces older than WORK_DIR_TTL."""
     cutoff = datetime.now().astimezone() - WORK_DIR_TTL
     for simulation_id in await repository.list_abandoned_work_dirs(cutoff):
         await asyncio.to_thread(remove_workspace, JOBS_DIR / simulation_id)

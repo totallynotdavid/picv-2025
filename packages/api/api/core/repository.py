@@ -250,14 +250,15 @@ async def get_current_step(conn: asyncpg.Connection, job_uuid: uuid.UUID) -> str
 
 
 async def list_abandoned_work_dirs(cutoff: datetime) -> list[str]:
-    """Return failed job workspaces older than the retention cutoff."""
+    """Return terminal job workspaces older than the retention cutoff."""
     async with acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT simulation_id FROM compute.jobs
-            WHERE status = $1 AND finished_at IS NOT NULL AND finished_at < $2
+            WHERE status = ANY($1::text[])
+              AND finished_at IS NOT NULL AND finished_at < $2
             """,
-            JobStatus.FAILED.value,
+            [JobStatus.FAILED.value, JobStatus.COMPLETED.value],
             cutoff,
         )
     return [str(row["simulation_id"]) for row in rows]
